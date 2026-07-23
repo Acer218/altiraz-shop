@@ -29,7 +29,7 @@ public class ProductsHandler implements HttpHandler {
         }
 
         try{
-            if(method.equals("GET") && id == null){
+            if((method.equals("GET") || method.equals("HEAD")) && id == null){
                 List<Product> products = dao.getAll();
                 sendJson(exchange, 200, gson.toJson(products));
                 return;
