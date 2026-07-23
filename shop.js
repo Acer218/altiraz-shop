@@ -1,5 +1,5 @@
 const ADMIN_PASSWORD = "i HATE MY LIFE218";
-const API_BASE = "http://localhost:8080/api";
+const API_BASE = "https://altiraz-backend.onrender.com/api";
 const CART_KEY = "altirazCart";
 let adminPasswordEntered = "";
 
