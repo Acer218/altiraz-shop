@@ -3,4 +3,5 @@ public class OrderItem {
     public String name;
     public double price;
     public int qty;
+    public String size;
 }
