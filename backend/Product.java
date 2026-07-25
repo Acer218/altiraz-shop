@@ -7,16 +7,20 @@ public class Product {
     public String category;
     public double price;
     public List<String> images;
+    public List<String> sizes;
+    public boolean inStock;
 
     public Product(){
     }
 
-    public Product(int id, String name, String description, String category, double price, List<String> images){
+    public Product(int id, String name, String description, String category, double price, List<String> images, List<String> sizes, boolean inStock){
         this.id = id;
         this.name = name;
         this.description = description;
         this.category = category;
         this.price = price;
         this.images = images;
+        this.sizes = sizes;
+        this.inStock = inStock;
     }
 }
