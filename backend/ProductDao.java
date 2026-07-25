@@ -11,7 +11,7 @@ public class ProductDao {
 
     public List<Product> getAll() throws Exception {
         Map<Integer, Product> map = new LinkedHashMap<>();
-        String sql = "SELECT p.id, p.name, p.description, p.category, p.price, i.image_data " +
+        String sql = "SELECT p.id, p.name, p.description, p.category, p.price, p.sizes, p.in_stock, i.image_data " +
                      "FROM products p LEFT JOIN product_images i ON i.product_id = p.id " +
                      "ORDER BY p.id DESC, i.sort_order ASC";
         try(Connection con = Db.getConnection();
@@ -22,7 +22,8 @@ public class ProductDao {
                 Product p = map.get(id);
                 if(p == null){
                     p = new Product(id, rs.getString("name"), rs.getString("description"),
-                            rs.getString("category"), rs.getDouble("price"), new ArrayList<>());
+                            rs.getString("category"), rs.getDouble("price"), new ArrayList<>(),
+                            parseSizes(rs.getString("sizes")), rs.getBoolean("in_stock"));
                     map.put(id, p);
                 }
                 String img = rs.getString("image_data");
@@ -35,13 +36,15 @@ public class ProductDao {
     }
 
     public Product create(Product p) throws Exception {
-        String sql = "INSERT INTO products (name, description, category, price) VALUES (?, ?, ?, ?)";
+        String sql = "INSERT INTO products (name, description, category, price, sizes, in_stock) VALUES (?, ?, ?, ?, ?, ?)";
         try(Connection con = Db.getConnection();
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
             ps.setString(1, p.name);
             ps.setString(2, p.description);
             ps.setString(3, p.category);
             ps.setDouble(4, p.price);
+            ps.setString(5, joinSizes(p.sizes));
+            ps.setBoolean(6, p.inStock);
             ps.executeUpdate();
             try(ResultSet keys = ps.getGeneratedKeys()){
                 keys.next();
@@ -53,14 +56,16 @@ public class ProductDao {
     }
 
     public void update(Product p) throws Exception {
-        String sql = "UPDATE products SET name=?, description=?, category=?, price=? WHERE id=?";
+        String sql = "UPDATE products SET name=?, description=?, category=?, price=?, sizes=?, in_stock=? WHERE id=?";
         try(Connection con = Db.getConnection();
             PreparedStatement ps = con.prepareStatement(sql)){
             ps.setString(1, p.name);
             ps.setString(2, p.description);
             ps.setString(3, p.category);
             ps.setDouble(4, p.price);
-            ps.setInt(5, p.id);
+            ps.setString(5, joinSizes(p.sizes));
+            ps.setBoolean(6, p.inStock);
+            ps.setInt(7, p.id);
             ps.executeUpdate();
 
             try(PreparedStatement del = con.prepareStatement("DELETE FROM product_images WHERE product_id=?")){
@@ -92,5 +97,20 @@ public class ProductDao {
             }
             ps.executeBatch();
         }
+    }
+
+    private List<String> parseSizes(String raw){
+        List<String> result = new ArrayList<>();
+        if(raw == null || raw.trim().isEmpty()) return result;
+        for(String s : raw.split(",")){
+            String trimmed = s.trim();
+            if(!trimmed.isEmpty()) result.add(trimmed);
+        }
+        return result;
+    }
+
+    private String joinSizes(List<String> sizes){
+        if(sizes == null || sizes.isEmpty()) return "";
+        return String.join(",", sizes);
     }
 }
