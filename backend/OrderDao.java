@@ -23,7 +23,7 @@ public class OrderDao {
                 keys.next();
                 o.id = keys.getInt(1);
             }
-            String itemSql = "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (?, ?, ?, ?, ?)";
+            String itemSql = "INSERT INTO order_items (order_id, product_id, product_name, price, quantity, size) VALUES (?, ?, ?, ?, ?, ?)";
             try(PreparedStatement ips = con.prepareStatement(itemSql)){
                 for(OrderItem item : o.items){
                     ips.setInt(1, o.id);
@@ -31,6 +31,7 @@ public class OrderDao {
                     ips.setString(3, item.name);
                     ips.setDouble(4, item.price);
                     ips.setInt(5, item.qty);
+                    ips.setString(6, item.size);
                     ips.addBatch();
                 }
                 ips.executeBatch();
@@ -42,7 +43,7 @@ public class OrderDao {
     public List<Order> getAll() throws Exception {
         Map<Integer, Order> map = new LinkedHashMap<>();
         String sql = "SELECT o.id, o.customer_name, o.phone, o.location, o.total_price, o.created_at, " +
-                     "i.product_name, i.price, i.quantity " +
+                     "i.product_name, i.price, i.quantity, i.size " +
                      "FROM orders o LEFT JOIN order_items i ON i.order_id = o.id " +
                      "ORDER BY o.id DESC";
         try(Connection con = Db.getConnection();
@@ -69,6 +70,7 @@ public class OrderDao {
                     item.name = pname;
                     item.price = rs.getDouble("price");
                     item.qty = rs.getInt("quantity");
+                    item.size = rs.getString("size");
                     o.items.add(item);
                 }
             }
