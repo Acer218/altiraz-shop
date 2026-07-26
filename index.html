@@ -23,10 +23,22 @@
 <body>
 
 <header>
-  <div class="header-inner">
-    <div class="brand" id="brandLogo">الطراز</div>
-    <nav id="navButtons"></nav>
+  <div class="header-top">
+    <div class="brand-group">
+      <button class="header-cart-btn" id="headerCartBtn" aria-label="السلة">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V6a6 6 0 0112 0v3"/><path d="M3 9h18l-1.5 11.5a2 2 0 01-2 1.5H6.5a2 2 0 01-2-1.5L3 9z"/></svg>
+        <span class="cart-badge" id="cartBadge">0</span>
+      </button>
+      <div class="brand" id="brandLogo">الطراز</div>
+    </div>
+    <div class="header-search">
+      <input type="text" id="globalSearch" placeholder="ابحث عن منتج...">
+      <button id="globalSearchBtn" aria-label="بحث">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+    </div>
   </div>
+  <nav id="navButtons"></nav>
 </header>
 
 <div class="admin-banner" id="adminBanner" style="display:none;"></div>
