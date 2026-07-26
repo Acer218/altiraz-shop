@@ -1,89 +1,116 @@
-]import java.sql.Connection;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class OrderDao {
+public class ProductDao {
 
-    public Order create(Order o) throws Exception {
-        String sql = "INSERT INTO orders (customer_name, phone, location, total_price) VALUES (?, ?, ?, ?)";
-        try(Connection con = Db.getConnection();
-            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
-            ps.setString(1, o.name);
-            ps.setString(2, o.phone);
-            ps.setString(3, o.location);
-            ps.setDouble(4, o.total);
-            ps.executeUpdate();
-            try(ResultSet keys = ps.getGeneratedKeys()){
-                keys.next();
-                o.id = keys.getInt(1);
-            }
-            String itemSql = "INSERT INTO order_items (order_id, product_id, product_name, price, quantity, size) VALUES (?, ?, ?, ?, ?, ?)";
-            try(PreparedStatement ips = con.prepareStatement(itemSql)){
-                for(OrderItem item : o.items){
-                    ips.setInt(1, o.id);
-                    ips.setInt(2, item.productId);
-                    ips.setString(3, item.name);
-                    ips.setDouble(4, item.price);
-                    ips.setInt(5, item.qty);
-                    ips.setString(6, item.size);
-                    ips.addBatch();
-                }
-                ips.executeBatch();
-            }
-        }
-        return o;
-    }
-
-    public List<Order> getAll() throws Exception {
-        Map<Integer, Order> map = new LinkedHashMap<>();
-        String sql = "SELECT o.id, o.customer_name, o.phone, o.location, o.total_price, o.created_at, " +
-                     "i.product_name, i.price, i.quantity, i.size " +
-                     "FROM orders o LEFT JOIN order_items i ON i.order_id = o.id " +
-                     "ORDER BY o.id DESC";
+    public List<Product> getAll() throws Exception {
+        Map<Integer, Product> map = new LinkedHashMap<>();
+        String sql = "SELECT p.id, p.name, p.description, p.category, p.price, p.sizes, p.in_stock, i.image_data " +
+                     "FROM products p LEFT JOIN product_images i ON i.product_id = p.id " +
+                     "ORDER BY p.id DESC, i.sort_order ASC";
         try(Connection con = Db.getConnection();
             PreparedStatement ps = con.prepareStatement(sql);
             ResultSet rs = ps.executeQuery()){
             while(rs.next()){
                 int id = rs.getInt("id");
-                Order o = map.get(id);
-                if(o == null){
-                    o = new Order();
-                    o.id = id;
-                    o.name = rs.getString("customer_name");
-                    o.phone = rs.getString("phone");
-                    o.location = rs.getString("location");
-                    o.total = rs.getDouble("total_price");
-                    Timestamp ts = rs.getTimestamp("created_at");
-                    o.date = ts.toInstant().toString();
-                    o.items = new ArrayList<>();
-                    map.put(id, o);
+                Product p = map.get(id);
+                if(p == null){
+                    p = new Product(id, rs.getString("name"), rs.getString("description"),
+                            rs.getString("category"), rs.getDouble("price"), new ArrayList<>(),
+                            parseSizes(rs.getString("sizes")), rs.getBoolean("in_stock"));
+                    map.put(id, p);
                 }
-                String pname = rs.getString("product_name");
-                if(pname != null){
-                    OrderItem item = new OrderItem();
-                    item.name = pname;
-                    item.price = rs.getDouble("price");
-                    item.qty = rs.getInt("quantity");
-                    item.size = rs.getString("size");
-                    o.items.add(item);
+                String img = rs.getString("image_data");
+                if(img != null){
+                    p.images.add(img);
                 }
             }
         }
         return new ArrayList<>(map.values());
     }
 
+    public Product create(Product p) throws Exception {
+        String sql = "INSERT INTO products (name, description, category, price, sizes, in_stock) VALUES (?, ?, ?, ?, ?, ?)";
+        try(Connection con = Db.getConnection();
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
+            ps.setString(1, p.name);
+            ps.setString(2, p.description);
+            ps.setString(3, p.category);
+            ps.setDouble(4, p.price);
+            ps.setString(5, joinSizes(p.sizes));
+            ps.setBoolean(6, p.inStock);
+            ps.executeUpdate();
+            try(ResultSet keys = ps.getGeneratedKeys()){
+                keys.next();
+                p.id = keys.getInt(1);
+            }
+            insertImages(con, p.id, p.images);
+        }
+        return p;
+    }
+
+    public void update(Product p) throws Exception {
+        String sql = "UPDATE products SET name=?, description=?, category=?, price=?, sizes=?, in_stock=? WHERE id=?";
+        try(Connection con = Db.getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+            ps.setString(1, p.name);
+            ps.setString(2, p.description);
+            ps.setString(3, p.category);
+            ps.setDouble(4, p.price);
+            ps.setString(5, joinSizes(p.sizes));
+            ps.setBoolean(6, p.inStock);
+            ps.setInt(7, p.id);
+            ps.executeUpdate();
+
+            try(PreparedStatement del = con.prepareStatement("DELETE FROM product_images WHERE product_id=?")){
+                del.setInt(1, p.id);
+                del.executeUpdate();
+            }
+            insertImages(con, p.id, p.images);
+        }
+    }
+
     public void delete(int id) throws Exception {
-        String sql = "DELETE FROM orders WHERE id=?";
+        String sql = "DELETE FROM products WHERE id=?";
         try(Connection con = Db.getConnection();
             PreparedStatement ps = con.prepareStatement(sql)){
             ps.setInt(1, id);
             ps.executeUpdate();
         }
+    }
+
+    private void insertImages(Connection con, int productId, List<String> images) throws Exception {
+        if(images == null || images.isEmpty()) return;
+        String sql = "INSERT INTO product_images (product_id, image_data, sort_order) VALUES (?, ?, ?)";
+        try(PreparedStatement ps = con.prepareStatement(sql)){
+            for(int i = 0; i < images.size(); i++){
+                ps.setInt(1, productId);
+                ps.setString(2, images.get(i));
+                ps.setInt(3, i);
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
+    }
+
+    private List<String> parseSizes(String raw){
+        List<String> result = new ArrayList<>();
+        if(raw == null || raw.trim().isEmpty()) return result;
+        for(String s : raw.split(",")){
+            String trimmed = s.trim();
+            if(!trimmed.isEmpty()) result.add(trimmed);
+        }
+        return result;
+    }
+
+    private String joinSizes(List<String> sizes){
+        if(sizes == null || sizes.isEmpty()) return "";
+        return String.join(",", sizes);
     }
 }
