@@ -11,7 +11,7 @@ public class ProductDao {
 
     public List<Product> getAll() throws Exception {
         Map<Integer, Product> map = new LinkedHashMap<>();
-        String sql = "SELECT p.id, p.name, p.description, p.category, p.price, p.sizes, p.in_stock, i.image_data " +
+        String sql = "SELECT p.id, p.name, p.description, p.category, p.price, p.sizes, p.in_stock, p.featured, i.image_data " +
                      "FROM products p LEFT JOIN product_images i ON i.product_id = p.id " +
                      "ORDER BY p.id DESC, i.sort_order ASC";
         try(Connection con = Db.getConnection();
@@ -23,7 +23,7 @@ public class ProductDao {
                 if(p == null){
                     p = new Product(id, rs.getString("name"), rs.getString("description"),
                             rs.getString("category"), rs.getDouble("price"), new ArrayList<>(),
-                            parseSizes(rs.getString("sizes")), rs.getBoolean("in_stock"));
+                            parseSizes(rs.getString("sizes")), rs.getBoolean("in_stock"), rs.getBoolean("featured"));
                     map.put(id, p);
                 }
                 String img = rs.getString("image_data");
@@ -36,7 +36,7 @@ public class ProductDao {
     }
 
     public Product create(Product p) throws Exception {
-        String sql = "INSERT INTO products (name, description, category, price, sizes, in_stock) VALUES (?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO products (name, description, category, price, sizes, in_stock, featured) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try(Connection con = Db.getConnection();
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
             ps.setString(1, p.name);
@@ -45,6 +45,7 @@ public class ProductDao {
             ps.setDouble(4, p.price);
             ps.setString(5, joinSizes(p.sizes));
             ps.setBoolean(6, p.inStock);
+            ps.setBoolean(7, p.featured);
             ps.executeUpdate();
             try(ResultSet keys = ps.getGeneratedKeys()){
                 keys.next();
@@ -56,7 +57,7 @@ public class ProductDao {
     }
 
     public void update(Product p) throws Exception {
-        String sql = "UPDATE products SET name=?, description=?, category=?, price=?, sizes=?, in_stock=? WHERE id=?";
+        String sql = "UPDATE products SET name=?, description=?, category=?, price=?, sizes=?, in_stock=?, featured=? WHERE id=?";
         try(Connection con = Db.getConnection();
             PreparedStatement ps = con.prepareStatement(sql)){
             ps.setString(1, p.name);
@@ -65,7 +66,8 @@ public class ProductDao {
             ps.setDouble(4, p.price);
             ps.setString(5, joinSizes(p.sizes));
             ps.setBoolean(6, p.inStock);
-            ps.setInt(7, p.id);
+            ps.setBoolean(7, p.featured);
+            ps.setInt(8, p.id);
             ps.executeUpdate();
 
             try(PreparedStatement del = con.prepareStatement("DELETE FROM product_images WHERE product_id=?")){
