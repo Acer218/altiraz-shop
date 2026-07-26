@@ -1,6 +1,7 @@
 const ADMIN_PASSWORD = "i HATE MY LIFE218";
 const API_BASE = "https://altiraz-backend.onrender.com/api";
 const CART_KEY = "altirazCart";
+const WHATSAPP_NUMBER = "218925016142";
 let adminPasswordEntered = "";
 
 const CATEGORIES = [
@@ -24,7 +25,9 @@ let editingId = null;
 let gateOpen = false;
 let checkoutOpen = false;
 let orderConfirmed = false;
+let lastOrderId = null;
 let logoTaps = [];
+let categorySearchTerm = "";
 
 const mainEl = document.getElementById("main");
 const navEl = document.getElementById("navButtons");
@@ -36,7 +39,7 @@ function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
-/* products & orders now live in SQL Server via the Java API */
+/* products & orders now live in Postgres via the Java API */
 async function loadProducts(){
   try{
     const res = await fetch(`${API_BASE}/products`);
@@ -116,7 +119,7 @@ function refreshCartBadge(){
 }
 
 function goHome(){ view="home"; currentCategory=null; editingId=null; pendingImages=[]; setActiveNav(); render(); scrollTop(); }
-function goCategory(key){ view="category"; currentCategory=key; editingId=null; pendingImages=[]; setActiveNav(); render(); scrollTop(); }
+function goCategory(key){ view="category"; currentCategory=key; editingId=null; pendingImages=[]; categorySearchTerm=""; setActiveNav(); render(); scrollTop(); }
 function goCart(){ view="cart"; checkoutOpen=false; orderConfirmed=false; setActiveNav(); render(); scrollTop(); }
 async function goOrders(){
   view="orders";
@@ -171,7 +174,10 @@ function renderHome(){
     <div class="contact reveal">
       <h2>تواصل معنا</h2>
       <p>للطلب أو الاستفسار، اتصل بنا مباشرة</p>
-      <a class="mono" href="tel:0925016142">0925016142</a>
+      <div class="contact-btns">
+        <a class="mono" href="tel:0925016142">0925016142</a>
+        <a class="whatsapp-btn" href="https://wa.me/${WHATSAPP_NUMBER}" target="_blank" rel="noopener">واتساب</a>
+      </div>
     </div>
   `;
 
@@ -220,12 +226,14 @@ function setupReveal(){
 /* category view */
 function renderCategory(key){
   const c = CATEGORIES.find(c => c.key === key);
-  const items = products.filter(p => p.category === key).reverse();
 
   let html = `
     <div class="cat-top">
       <h2>${c.label}</h2>
       <p>${c.tagline}</p>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="catSearch" placeholder="ابحث في قسم ${c.label}..." value="${escapeHtml(categorySearchTerm)}">
     </div>
   `;
 
@@ -233,21 +241,61 @@ function renderCategory(key){
     html += renderAdminForm(key);
   }
 
+  html += `<div id="categoryGridContainer"></div>`;
+
+  mainEl.innerHTML = html;
+
+  const searchInput = document.getElementById("catSearch");
+  searchInput.addEventListener("input", () => {
+    categorySearchTerm = searchInput.value;
+    renderCategoryGrid(key);
+  });
+
+  if(adminUnlocked){
+    wireAdminForm(key);
+  }
+
+  renderCategoryGrid(key);
+}
+
+function renderCategoryGrid(key){
+  const container = document.getElementById("categoryGridContainer");
+  if(!container) return;
+
+  const term = categorySearchTerm.trim().toLowerCase();
+  let items = products.filter(p => p.category === key).reverse();
+  if(term){
+    items = items.filter(p =>
+      p.name.toLowerCase().includes(term) || p.description.toLowerCase().includes(term)
+    );
+  }
+
+  let html = "";
   if(items.length === 0){
-    html += `
+    html = `
       <div class="empty">
-        <h3>لا توجد قطع بعد في هذا القسم.</h3>
-        <p>تابعونا، قريبًا قطع جديدة.</p>
+        <h3>${term ? "لا توجد نتائج مطابقة." : "لا توجد قطع بعد في هذا القسم."}</h3>
+        <p>${term ? "جرّب كلمة بحث أخرى." : "تابعونا، قريبًا قطع جديدة."}</p>
       </div>
     `;
   } else {
     html += '<div class="grid">';
     for(const p of items){
+      const sizes = p.sizes || [];
+      const soldOut = p.inStock === false;
       html += `
         <div class="tag" data-id="${p.id}">
           <img class="tag-img" src="${p.images[0]}" alt="${escapeHtml(p.name)}">
+          ${soldOut ? `<span class="sold-out-badge">نفذت الكمية</span>` : ``}
           <h3 class="tag-name">${escapeHtml(p.name)}</h3>
           <p class="tag-desc">${escapeHtml(p.description)}</p>
+          ${(!adminUnlocked && sizes.length > 0 && !soldOut) ? `
+            <div class="size-select-wrap">
+              <select class="size-select" data-id="${p.id}">
+                ${sizes.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
+              </select>
+            </div>
+          ` : ``}
           <div class="tag-footer">
             <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
             ${adminUnlocked ? `
@@ -255,6 +303,8 @@ function renderCategory(key){
                 <button class="tag-edit" data-id="${p.id}">تعديل</button>
                 <button class="tag-del" data-id="${p.id}">حذف</button>
               </div>
+            ` : soldOut ? `
+              <button class="add-cart-btn" disabled>نفذت الكمية</button>
             ` : `
               <button class="add-cart-btn" data-id="${p.id}">أضف إلى السلة</button>
             `}
@@ -265,23 +315,25 @@ function renderCategory(key){
     html += '</div>';
   }
 
-  mainEl.innerHTML = html;
+  container.innerHTML = html;
 
-  mainEl.querySelectorAll(".tag").forEach(tagEl => {
+  container.querySelectorAll(".tag").forEach(tagEl => {
     tagEl.addEventListener("click", (e) => {
-      if(e.target.closest("button")) return;
+      if(e.target.closest("button") || e.target.closest("select")) return;
       openProductModal(Number(tagEl.dataset.id));
     });
   });
 
   if(adminUnlocked){
-    wireAdminForm(key);
-    mainEl.querySelectorAll(".tag-edit").forEach(btn => btn.addEventListener("click", () => startEdit(Number(btn.dataset.id), key)));
-    mainEl.querySelectorAll(".tag-del").forEach(btn => btn.addEventListener("click", () => handleDelete(Number(btn.dataset.id), key)));
+    container.querySelectorAll(".tag-edit").forEach(btn => btn.addEventListener("click", () => startEdit(Number(btn.dataset.id), key)));
+    container.querySelectorAll(".tag-del").forEach(btn => btn.addEventListener("click", () => handleDelete(Number(btn.dataset.id), key)));
   } else {
-    mainEl.querySelectorAll(".add-cart-btn").forEach(btn => {
+    container.querySelectorAll(".add-cart-btn:not([disabled])").forEach(btn => {
       btn.addEventListener("click", () => {
-        addToCart(Number(btn.dataset.id));
+        const id = Number(btn.dataset.id);
+        const sizeSelect = container.querySelector(`.size-select[data-id="${id}"]`);
+        const size = sizeSelect ? sizeSelect.value : null;
+        addToCart(id, size);
         const original = btn.textContent;
         btn.textContent = "أُضيفت ✓";
         btn.disabled = true;
@@ -294,6 +346,8 @@ function renderCategory(key){
 /* admin add/edit form */
 function renderAdminForm(catKey){
   const editing = editingId ? products.find(p => p.id === editingId) : null;
+  const sizesValue = editing && editing.sizes ? editing.sizes.join(", ") : "";
+  const inStockChecked = editing ? editing.inStock !== false : true;
   return `
     <div class="panel">
       <h3>${editing ? "تعديل القطعة" : "إضافة قطعة جديدة"}</h3>
@@ -314,6 +368,13 @@ function renderAdminForm(catKey){
       <div class="field">
         <label for="fPrice">السعر (د.ل)</label>
         <input type="number" id="fPrice" min="0" step="0.01" placeholder="0.00" value="${editing ? editing.price : ""}">
+      </div>
+      <div class="field">
+        <label for="fSizes">المقاسات (افصل بينها بفاصلة، اتركها فارغة إذا لا يوجد مقاسات)</label>
+        <input type="text" id="fSizes" placeholder="مثال: S, M, L, XL" value="${escapeHtml(sizesValue)}">
+      </div>
+      <div class="field field-checkbox">
+        <label for="fInStock"><input type="checkbox" id="fInStock" ${inStockChecked ? "checked" : ""}> متوفر في المخزون</label>
       </div>
       <div class="field">
         <label for="fImage">الصور (يمكن اختيار أكثر من صورة، الصورة الأولى هي التي تظهر في المتجر)</label>
@@ -403,6 +464,8 @@ async function handleSave(catKey){
   const description = document.getElementById("fDesc").value.trim();
   const category = document.getElementById("fCat").value;
   const price = document.getElementById("fPrice").value;
+  const sizesRaw = document.getElementById("fSizes").value;
+  const inStock = document.getElementById("fInStock").checked;
   const msg = document.getElementById("formMsg");
   const editing = editingId ? products.find(p => p.id === editingId) : null;
   const images = pendingImages;
@@ -418,7 +481,8 @@ async function handleSave(catKey){
     return;
   }
 
-  const payload = { name, description, category, price: Number(price), images };
+  const sizes = sizesRaw.split(",").map(s => s.trim()).filter(s => s.length > 0);
+  const payload = { name, description, category, price: Number(price), images, sizes, inStock };
   const saveBtn = document.getElementById("saveBtn");
   saveBtn.disabled = true;
 
@@ -462,17 +526,19 @@ async function handleDelete(id, catKey){
   }catch(e){ /* leave the item in place if the server call failed */ }
 }
 
-/* cart */
-function addToCart(id){
-  const entry = cart.find(i => i.id === id);
+/* cart (id + size uniquely identify a cart line) */
+function addToCart(id, size){
+  const normSize = size || null;
+  const entry = cart.find(i => i.id === id && (i.size || null) === normSize);
   if(entry) entry.qty += 1;
-  else cart.push({ id, qty: 1 });
+  else cart.push({ id, size: normSize, qty: 1 });
   saveCart();
   refreshCartBadge();
 }
 
-function removeFromCart(id){
-  cart = cart.filter(i => i.id !== id);
+function removeFromCart(id, size){
+  const normSize = size || null;
+  cart = cart.filter(i => !(i.id === id && (i.size || null) === normSize));
   saveCart();
   refreshCartBadge();
   renderCart();
@@ -486,6 +552,7 @@ function renderCart(){
     mainEl.innerHTML = `
       <div class="empty" style="padding-top:60px;">
         <h3>تم استلام طلبك بنجاح</h3>
+        ${lastOrderId ? `<p class="order-ref mono">رقم الطلب: #${lastOrderId}</p>` : ``}
         <p>سنتواصل معك قريبًا على الرقم الذي أدخلته لتأكيد التفاصيل والتوصيل.</p>
         <button class="preview-btn" id="backHomeBtn" style="margin-top:16px;">العودة للتسوق</button>
       </div>
@@ -497,7 +564,7 @@ function renderCart(){
 
   const rows = cart.map(i => {
     const p = products.find(p => p.id === i.id);
-    return { p, qty: i.qty };
+    return { p, qty: i.qty, size: i.size || null };
   });
   const total = rows.reduce((sum, r) => sum + r.p.price * r.qty, 0);
 
@@ -523,9 +590,9 @@ function renderCart(){
         <img class="cart-row-img" src="${r.p.images[0]}" alt="${escapeHtml(r.p.name)}">
         <div class="cart-row-info">
           <div class="cart-row-name">${escapeHtml(r.p.name)}</div>
-          <div class="cart-row-meta mono">الكمية: ${r.qty} &times; ${r.p.price.toFixed(2)} د.ل</div>
+          <div class="cart-row-meta mono">${r.size ? `المقاس: ${escapeHtml(r.size)} — ` : ``}الكمية: ${r.qty} &times; ${r.p.price.toFixed(2)} د.ل</div>
         </div>
-        <button class="tag-del" data-id="${r.p.id}">إلغاء</button>
+        <button class="tag-del" data-id="${r.p.id}" data-size="${r.size ? escapeHtml(r.size) : ""}">إلغاء</button>
       </div>
     `;
   }
@@ -561,7 +628,7 @@ function renderCart(){
   mainEl.innerHTML = html;
 
   mainEl.querySelectorAll(".cart-row .tag-del").forEach(btn => {
-    btn.addEventListener("click", () => removeFromCart(Number(btn.dataset.id)));
+    btn.addEventListener("click", () => removeFromCart(Number(btn.dataset.id), btn.dataset.size || null));
   });
 
   if(!checkoutOpen){
@@ -596,7 +663,7 @@ async function handleConfirmOrder(rows, total){
   const payload = {
     name, phone, location,
     total,
-    items: rows.map(r => ({ productId: r.p.id, name: r.p.name, price: r.p.price, qty: r.qty }))
+    items: rows.map(r => ({ productId: r.p.id, name: r.p.name, price: r.p.price, qty: r.qty, size: r.size }))
   };
   const confirmBtn = document.getElementById("confirmOrderBtn");
   confirmBtn.disabled = true;
@@ -608,6 +675,8 @@ async function handleConfirmOrder(rows, total){
       body: JSON.stringify(payload)
     });
     if(!res.ok) throw new Error("order failed");
+    const created = await res.json();
+    lastOrderId = created && created.id ? created.id : null;
 
     cart = [];
     saveCart();
@@ -633,13 +702,13 @@ function renderOrders(){
       html += `
         <div class="order-card">
           <div class="order-head">
-            <span class="order-name">${escapeHtml(o.name)}</span>
+            <span class="order-name">${escapeHtml(o.name)} <span class="order-id mono">#${o.id}</span></span>
             <button class="tag-del" data-id="${o.id}">حذف</button>
           </div>
           <div class="order-meta mono">${escapeHtml(o.phone)}</div>
           <div class="order-meta">${escapeHtml(o.location)}</div>
           <div class="order-items">
-            ${o.items.map(i => `<div>${escapeHtml(i.name)} &times; ${i.qty} — ${i.price.toFixed(2)} د.ل</div>`).join("")}
+            ${o.items.map(i => `<div>${escapeHtml(i.name)}${i.size ? ` (${escapeHtml(i.size)})` : ``} &times; ${i.qty} — ${i.price.toFixed(2)} د.ل</div>`).join("")}
           </div>
           <div class="order-total mono">الإجمالي: ${o.total.toFixed(2)} د.ل</div>
           <div class="order-date">${d.toLocaleString("ar")}</div>
@@ -668,6 +737,8 @@ function openProductModal(id){
   const p = products.find(p => p.id === id);
   if(!p) return;
   let galleryIndex = 0;
+  const sizes = p.sizes || [];
+  const soldOut = p.inStock === false;
 
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay product-modal-overlay";
@@ -690,7 +761,15 @@ function openProductModal(id){
         <h3 class="product-modal-name">${escapeHtml(p.name)}</h3>
         <p class="product-modal-desc">${escapeHtml(p.description)}</p>
         <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
-        ${!adminUnlocked ? `<button class="primary-btn" id="pmAddCart" style="margin-top:16px;">أضف إلى السلة</button>` : ``}
+        ${soldOut ? `<p class="sold-out-text">نفذت الكمية حاليًا</p>` : ``}
+        ${(!adminUnlocked && sizes.length > 0 && !soldOut) ? `
+          <div class="size-select-wrap" style="margin-top:14px;">
+            <select class="size-select" id="pmSize">
+              ${sizes.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
+            </select>
+          </div>
+        ` : ``}
+        ${(!adminUnlocked && !soldOut) ? `<button class="primary-btn" id="pmAddCart" style="margin-top:16px;">أضف إلى السلة</button>` : ``}
       </div>
     `;
     document.getElementById("closeProductModal").addEventListener("click", closeProductModal);
@@ -707,9 +786,12 @@ function openProductModal(id){
       galleryIndex = (galleryIndex + 1) % p.images.length;
       draw();
     });
-    if(!adminUnlocked){
-      document.getElementById("pmAddCart").addEventListener("click", () => {
-        addToCart(p.id);
+    const addBtn = document.getElementById("pmAddCart");
+    if(addBtn){
+      addBtn.addEventListener("click", () => {
+        const sizeSelect = document.getElementById("pmSize");
+        const size = sizeSelect ? sizeSelect.value : null;
+        addToCart(p.id, size);
         closeProductModal();
       });
     }
