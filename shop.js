@@ -8,6 +8,7 @@ const CATEGORIES = [
   { key: "women", label: "اثواب", tagline: "أثواب تقليدية فاخرة مستوحاة من التراث الليبي" },
   { key: "men", label: "رجال", tagline: "أزياء رجالية أصيلة تجمع بين التراث والفخامة" },
   { key: "kids", label: "أطفال", tagline: "تشكيلة مختارة بعناية لأصغر أفراد العائلة" },
+  { key: "shoes", label: "أحذية", tagline: "أحذية مريحة وأنيقة تناسب كل إطلالة" },
   { key: "underwear", label: "ملابس داخلية", tagline: "راحة وجودة عالية لكل أفراد العائلة" },
   { key: "accessories", label: "اكسسوارات", tagline: "لمسات تكمّل إطلالتك التقليدية" },
   { key: "perfumes", label: "عطور", tagline: "عطور أصيلة تدوم طويلًا" }
@@ -28,12 +29,16 @@ let orderConfirmed = false;
 let lastOrderId = null;
 let logoTaps = [];
 let categorySearchTerm = "";
+let globalSearchTerm = "";
 
 const mainEl = document.getElementById("main");
 const navEl = document.getElementById("navButtons");
 const bannerEl = document.getElementById("adminBanner");
 const brandEl = document.getElementById("brandLogo");
 const secretDot = document.getElementById("secretDot");
+const headerCartBtn = document.getElementById("headerCartBtn");
+const globalSearchInput = document.getElementById("globalSearch");
+const globalSearchBtn = document.getElementById("globalSearchBtn");
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -83,7 +88,6 @@ function buildNav(){
   for(const c of CATEGORIES){
     html += `<button data-view="category" data-cat="${c.key}">${c.label}</button>`;
   }
-  html += `<button data-view="cart">السلة<span class="cart-badge" id="cartBadge">0</span></button>`;
   if(adminUnlocked){
     html += `<button data-view="orders">الطلبات</button>`;
   }
@@ -92,7 +96,6 @@ function buildNav(){
     btn.addEventListener("click", () => {
       if(btn.dataset.view === "home") goHome();
       else if(btn.dataset.view === "category") goCategory(btn.dataset.cat);
-      else if(btn.dataset.view === "cart") goCart();
       else if(btn.dataset.view === "orders") goOrders();
     });
   });
@@ -104,7 +107,6 @@ function setActiveNav(){
     let active = false;
     if(view === "home" && btn.dataset.view === "home") active = true;
     if(view === "category" && btn.dataset.cat === currentCategory) active = true;
-    if(view === "cart" && btn.dataset.view === "cart") active = true;
     if(view === "orders" && btn.dataset.view === "orders") active = true;
     btn.classList.toggle("active", active);
   });
@@ -121,6 +123,14 @@ function refreshCartBadge(){
 function goHome(){ view="home"; currentCategory=null; editingId=null; pendingImages=[]; setActiveNav(); render(); scrollTop(); }
 function goCategory(key){ view="category"; currentCategory=key; editingId=null; pendingImages=[]; categorySearchTerm=""; setActiveNav(); render(); scrollTop(); }
 function goCart(){ view="cart"; checkoutOpen=false; orderConfirmed=false; setActiveNav(); render(); scrollTop(); }
+function goSearchGlobal(term){
+  view = "search";
+  currentCategory = null;
+  globalSearchTerm = term.trim();
+  setActiveNav();
+  render();
+  scrollTop();
+}
 async function goOrders(){
   view="orders";
   setActiveNav();
@@ -142,6 +152,7 @@ function render(){
   else if(view === "category") renderCategory(currentCategory);
   else if(view === "cart") renderCart();
   else if(view === "orders") renderOrders();
+  else if(view === "search") renderSearchView();
 }
 
 function renderBanner(){
@@ -165,21 +176,23 @@ function renderBanner(){
 
 /* home view */
 function renderHome(){
+  const featuredItems = products.filter(p => p.featured);
+
   let html = `
     <div class="hero reveal">
       <h1>الطراز</h1>
       <p>الطراز متجر ليبي متخصص في الأزياء التقليدية الأصيلة، نقدّم لكم أجمل وأرقى وأكثر التصاميم تميّزًا وأناقة، بلمسة تراثية خالصة.</p>
     </div>
-
-    <div class="contact reveal">
-      <h2>تواصل معنا</h2>
-      <p>للطلب أو الاستفسار، اتصل بنا مباشرة</p>
-      <div class="contact-btns">
-        <a class="mono" href="tel:0925016142">0925016142</a>
-        <a class="whatsapp-btn" href="https://wa.me/${WHATSAPP_NUMBER}" target="_blank" rel="noopener">واتساب</a>
-      </div>
-    </div>
   `;
+
+  if(featuredItems.length > 0){
+    html += `
+      <div class="featured-section reveal">
+        <h2>مختارات مميزة</h2>
+        <div class="featured-scroll" id="featuredScroll"></div>
+      </div>
+    `;
+  }
 
   for(const c of CATEGORIES){
     const items = products.filter(p => p.category === c.key).slice(-3).reverse();
@@ -198,6 +211,13 @@ function renderHome(){
   }
 
   mainEl.innerHTML = html;
+
+  if(featuredItems.length > 0){
+    const scrollEl = document.getElementById("featuredScroll");
+    scrollEl.innerHTML = featuredItems.map(buildCustomerCardHtml).join("");
+    wireCustomerCards(scrollEl);
+  }
+
   mainEl.querySelectorAll(".preview-btn").forEach(btn => {
     btn.addEventListener("click", () => goCategory(btn.dataset.cat));
   });
@@ -258,6 +278,51 @@ function renderCategory(key){
   renderCategoryGrid(key);
 }
 
+function buildCustomerCardHtml(p){
+  const sizes = p.sizes || [];
+  const soldOut = p.inStock === false;
+  return `
+    <div class="tag" data-id="${p.id}">
+      <img class="tag-img" src="${p.images[0]}" alt="${escapeHtml(p.name)}">
+      ${soldOut ? `<span class="sold-out-badge">نفذت الكمية</span>` : ``}
+      <h3 class="tag-name">${escapeHtml(p.name)}</h3>
+      <p class="tag-desc">${escapeHtml(p.description)}</p>
+      ${(sizes.length > 0 && !soldOut) ? `
+        <div class="size-select-wrap">
+          <select class="size-select" data-id="${p.id}">
+            ${sizes.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
+          </select>
+        </div>
+      ` : ``}
+      <div class="tag-footer">
+        <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
+        ${soldOut ? `<button class="add-cart-btn" disabled>نفذت الكمية</button>` : `<button class="add-cart-btn" data-id="${p.id}">أضف إلى السلة</button>`}
+      </div>
+    </div>
+  `;
+}
+
+function wireCustomerCards(container){
+  container.querySelectorAll(".tag").forEach(tagEl => {
+    tagEl.addEventListener("click", (e) => {
+      if(e.target.closest("button") || e.target.closest("select")) return;
+      openProductModal(Number(tagEl.dataset.id));
+    });
+  });
+  container.querySelectorAll(".add-cart-btn:not([disabled])").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = Number(btn.dataset.id);
+      const sizeSelect = container.querySelector(`.size-select[data-id="${id}"]`);
+      const size = sizeSelect ? sizeSelect.value : null;
+      addToCart(id, size, 1);
+      const original = btn.textContent;
+      btn.textContent = "أُضيفت ✓";
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1200);
+    });
+  });
+}
+
 function renderCategoryGrid(key){
   const container = document.getElementById("categoryGridContainer");
   if(!container) return;
@@ -278,10 +343,13 @@ function renderCategoryGrid(key){
         <p>${term ? "جرّب كلمة بحث أخرى." : "تابعونا، قريبًا قطع جديدة."}</p>
       </div>
     `;
-  } else {
+    container.innerHTML = html;
+    return;
+  }
+
+  if(adminUnlocked){
     html += '<div class="grid">';
     for(const p of items){
-      const sizes = p.sizes || [];
       const soldOut = p.inStock === false;
       html += `
         <div class="tag" data-id="${p.id}">
@@ -289,58 +357,57 @@ function renderCategoryGrid(key){
           ${soldOut ? `<span class="sold-out-badge">نفذت الكمية</span>` : ``}
           <h3 class="tag-name">${escapeHtml(p.name)}</h3>
           <p class="tag-desc">${escapeHtml(p.description)}</p>
-          ${(!adminUnlocked && sizes.length > 0 && !soldOut) ? `
-            <div class="size-select-wrap">
-              <select class="size-select" data-id="${p.id}">
-                ${sizes.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
-              </select>
-            </div>
-          ` : ``}
           <div class="tag-footer">
             <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
-            ${adminUnlocked ? `
-              <div class="tag-admin-actions">
-                <button class="tag-edit" data-id="${p.id}">تعديل</button>
-                <button class="tag-del" data-id="${p.id}">حذف</button>
-              </div>
-            ` : soldOut ? `
-              <button class="add-cart-btn" disabled>نفذت الكمية</button>
-            ` : `
-              <button class="add-cart-btn" data-id="${p.id}">أضف إلى السلة</button>
-            `}
+            <div class="tag-admin-actions">
+              <button class="tag-edit" data-id="${p.id}">تعديل</button>
+              <button class="tag-del" data-id="${p.id}">حذف</button>
+            </div>
           </div>
         </div>
       `;
     }
     html += '</div>';
-  }
-
-  container.innerHTML = html;
-
-  container.querySelectorAll(".tag").forEach(tagEl => {
-    tagEl.addEventListener("click", (e) => {
-      if(e.target.closest("button") || e.target.closest("select")) return;
-      openProductModal(Number(tagEl.dataset.id));
+    container.innerHTML = html;
+    container.querySelectorAll(".tag").forEach(tagEl => {
+      tagEl.addEventListener("click", (e) => {
+        if(e.target.closest("button")) return;
+        openProductModal(Number(tagEl.dataset.id));
+      });
     });
-  });
-
-  if(adminUnlocked){
     container.querySelectorAll(".tag-edit").forEach(btn => btn.addEventListener("click", () => startEdit(Number(btn.dataset.id), key)));
     container.querySelectorAll(".tag-del").forEach(btn => btn.addEventListener("click", () => handleDelete(Number(btn.dataset.id), key)));
   } else {
-    container.querySelectorAll(".add-cart-btn:not([disabled])").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const id = Number(btn.dataset.id);
-        const sizeSelect = container.querySelector(`.size-select[data-id="${id}"]`);
-        const size = sizeSelect ? sizeSelect.value : null;
-        addToCart(id, size);
-        const original = btn.textContent;
-        btn.textContent = "أُضيفت ✓";
-        btn.disabled = true;
-        setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1200);
-      });
-    });
+    html = '<div class="grid">' + items.map(buildCustomerCardHtml).join("") + '</div>';
+    container.innerHTML = html;
+    wireCustomerCards(container);
   }
+}
+
+function renderSearchView(){
+  const term = globalSearchTerm.toLowerCase();
+  const items = term
+    ? products.filter(p => p.name.toLowerCase().includes(term) || p.description.toLowerCase().includes(term))
+    : [];
+
+  let html = `<div class="cat-top"><h2>نتائج البحث${globalSearchTerm ? `: "${escapeHtml(globalSearchTerm)}"` : ""}</h2></div>`;
+
+  if(items.length === 0){
+    html += `
+      <div class="empty">
+        <h3>لا توجد نتائج مطابقة.</h3>
+        <p>جرّب كلمة بحث أخرى، أو تصفّح الأقسام مباشرة.</p>
+      </div>
+    `;
+    mainEl.innerHTML = html;
+    return;
+  }
+
+  html += `<div class="grid" id="searchGrid"></div>`;
+  mainEl.innerHTML = html;
+  const grid = document.getElementById("searchGrid");
+  grid.innerHTML = items.map(buildCustomerCardHtml).join("");
+  wireCustomerCards(grid);
 }
 
 /* admin add/edit form */
@@ -348,6 +415,7 @@ function renderAdminForm(catKey){
   const editing = editingId ? products.find(p => p.id === editingId) : null;
   const sizesValue = editing && editing.sizes ? editing.sizes.join(", ") : "";
   const inStockChecked = editing ? editing.inStock !== false : true;
+  const featuredChecked = editing ? editing.featured === true : false;
   return `
     <div class="panel">
       <h3>${editing ? "تعديل القطعة" : "إضافة قطعة جديدة"}</h3>
@@ -375,6 +443,9 @@ function renderAdminForm(catKey){
       </div>
       <div class="field field-checkbox">
         <label for="fInStock"><input type="checkbox" id="fInStock" ${inStockChecked ? "checked" : ""}> متوفر في المخزون</label>
+      </div>
+      <div class="field field-checkbox">
+        <label for="fFeatured"><input type="checkbox" id="fFeatured" ${featuredChecked ? "checked" : ""}> إظهار في "مختارات مميزة" بالصفحة الرئيسية</label>
       </div>
       <div class="field">
         <label for="fImage">الصور (يمكن اختيار أكثر من صورة، الصورة الأولى هي التي تظهر في المتجر)</label>
@@ -466,6 +537,7 @@ async function handleSave(catKey){
   const price = document.getElementById("fPrice").value;
   const sizesRaw = document.getElementById("fSizes").value;
   const inStock = document.getElementById("fInStock").checked;
+  const featured = document.getElementById("fFeatured").checked;
   const msg = document.getElementById("formMsg");
   const editing = editingId ? products.find(p => p.id === editingId) : null;
   const images = pendingImages;
@@ -482,7 +554,7 @@ async function handleSave(catKey){
   }
 
   const sizes = sizesRaw.split(",").map(s => s.trim()).filter(s => s.length > 0);
-  const payload = { name, description, category, price: Number(price), images, sizes, inStock };
+  const payload = { name, description, category, price: Number(price), images, sizes, inStock, featured };
   const saveBtn = document.getElementById("saveBtn");
   saveBtn.disabled = true;
 
@@ -527,11 +599,12 @@ async function handleDelete(id, catKey){
 }
 
 /* cart (id + size uniquely identify a cart line) */
-function addToCart(id, size){
+function addToCart(id, size, qty){
   const normSize = size || null;
+  const addQty = qty && qty > 0 ? qty : 1;
   const entry = cart.find(i => i.id === id && (i.size || null) === normSize);
-  if(entry) entry.qty += 1;
-  else cart.push({ id, size: normSize, qty: 1 });
+  if(entry) entry.qty += addQty;
+  else cart.push({ id, size: normSize, qty: addQty });
   saveCart();
   refreshCartBadge();
 }
@@ -739,6 +812,8 @@ function openProductModal(id){
   let galleryIndex = 0;
   const sizes = p.sizes || [];
   const soldOut = p.inStock === false;
+  let selectedSize = sizes.length > 0 ? sizes[0] : null;
+  let qty = 1;
 
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay product-modal-overlay";
@@ -748,28 +823,47 @@ function openProductModal(id){
     overlay.innerHTML = `
       <div class="product-modal">
         <button class="modal-close" id="closeProductModal">✕</button>
-        <div class="product-modal-imgwrap">
-          ${p.images.length > 1 ? `<button class="pm-nav pm-prev" id="pmPrev">‹</button>` : ``}
-          <img class="product-modal-img" src="${p.images[galleryIndex]}" alt="${escapeHtml(p.name)}">
-          ${p.images.length > 1 ? `<button class="pm-nav pm-next" id="pmNext">›</button>` : ``}
+        <div class="pm-grid">
+          <div class="pm-gallery">
+            <div class="product-modal-imgwrap">
+              ${p.images.length > 1 ? `<button class="pm-nav pm-prev" id="pmPrev">‹</button>` : ``}
+              <img class="product-modal-img" src="${p.images[galleryIndex]}" alt="${escapeHtml(p.name)}">
+              ${p.images.length > 1 ? `<button class="pm-nav pm-next" id="pmNext">›</button>` : ``}
+              ${p.images.length > 1 ? `<span class="pm-counter mono">${galleryIndex+1} / ${p.images.length}</span>` : ``}
+            </div>
+            ${p.images.length > 1 ? `
+              <div class="product-modal-thumbs">
+                ${p.images.map((img,i) => `<img class="pm-thumb ${i===galleryIndex ? "active" : ""}" data-i="${i}" src="${img}">`).join("")}
+              </div>
+            ` : ``}
+          </div>
+          <div class="pm-info">
+            <h3 class="product-modal-name">${escapeHtml(p.name)}</h3>
+            <p class="product-modal-desc">${escapeHtml(p.description)}</p>
+            <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
+            ${soldOut ? `<p class="sold-out-text">نفذت الكمية حاليًا</p>` : `
+              ${(!adminUnlocked && sizes.length > 0) ? `
+                <div class="pm-size-block">
+                  <div class="pm-size-label">المقاس</div>
+                  <div class="pm-size-group">
+                    ${sizes.map(s => `<button type="button" class="pm-size-btn ${s === selectedSize ? "active" : ""}" data-size="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("")}
+                  </div>
+                </div>
+              ` : ``}
+              ${!adminUnlocked ? `
+                <div class="pm-qty-block">
+                  <div class="pm-size-label">الكمية</div>
+                  <div class="pm-qty-stepper">
+                    <button type="button" id="pmQtyMinus">−</button>
+                    <span class="mono" id="pmQtyValue">${qty}</span>
+                    <button type="button" id="pmQtyPlus">+</button>
+                  </div>
+                </div>
+                <button class="primary-btn" id="pmAddCart" style="margin-top:6px;">أضف إلى السلة</button>
+              ` : ``}
+            `}
+          </div>
         </div>
-        ${p.images.length > 1 ? `
-          <div class="product-modal-thumbs">
-            ${p.images.map((img,i) => `<img class="pm-thumb ${i===galleryIndex ? "active" : ""}" data-i="${i}" src="${img}">`).join("")}
-          </div>
-        ` : ``}
-        <h3 class="product-modal-name">${escapeHtml(p.name)}</h3>
-        <p class="product-modal-desc">${escapeHtml(p.description)}</p>
-        <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
-        ${soldOut ? `<p class="sold-out-text">نفذت الكمية حاليًا</p>` : ``}
-        ${(!adminUnlocked && sizes.length > 0 && !soldOut) ? `
-          <div class="size-select-wrap" style="margin-top:14px;">
-            <select class="size-select" id="pmSize">
-              ${sizes.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
-            </select>
-          </div>
-        ` : ``}
-        ${(!adminUnlocked && !soldOut) ? `<button class="primary-btn" id="pmAddCart" style="margin-top:16px;">أضف إلى السلة</button>` : ``}
       </div>
     `;
     document.getElementById("closeProductModal").addEventListener("click", closeProductModal);
@@ -786,13 +880,21 @@ function openProductModal(id){
       galleryIndex = (galleryIndex + 1) % p.images.length;
       draw();
     });
+    overlay.querySelectorAll(".pm-size-btn").forEach(btn => {
+      btn.addEventListener("click", () => { selectedSize = btn.dataset.size; draw(); });
+    });
+    const qtyMinus = document.getElementById("pmQtyMinus");
+    const qtyPlus = document.getElementById("pmQtyPlus");
+    if(qtyMinus) qtyMinus.addEventListener("click", () => { if(qty > 1) qty--; draw(); });
+    if(qtyPlus) qtyPlus.addEventListener("click", () => { qty++; draw(); });
     const addBtn = document.getElementById("pmAddCart");
     if(addBtn){
       addBtn.addEventListener("click", () => {
-        const sizeSelect = document.getElementById("pmSize");
-        const size = sizeSelect ? sizeSelect.value : null;
-        addToCart(p.id, size);
-        closeProductModal();
+        addToCart(p.id, selectedSize, qty);
+        const original = addBtn.textContent;
+        addBtn.textContent = "أُضيفت ✓";
+        addBtn.disabled = true;
+        setTimeout(() => { closeProductModal(); }, 500);
       });
     }
   }
@@ -870,6 +972,11 @@ function registerLogoTap(){
 }
 brandEl.addEventListener("click", registerLogoTap);
 secretDot.addEventListener("click", () => { if(!adminUnlocked && !gateOpen) openGate(); });
+headerCartBtn.addEventListener("click", goCart);
+globalSearchBtn.addEventListener("click", () => goSearchGlobal(globalSearchInput.value));
+globalSearchInput.addEventListener("keydown", e => {
+  if(e.key === "Enter") goSearchGlobal(globalSearchInput.value);
+});
 
 /* init */
 (async function init(){
