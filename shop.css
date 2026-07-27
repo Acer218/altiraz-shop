@@ -909,10 +909,19 @@ footer{
 }
 
 @media (min-width:700px){
-  .product-modal{ max-width:900px; padding:32px 36px 50px; }
-  .pm-grid{ flex-direction:row; text-align:right; gap:36px; }
-  .pm-gallery{ flex:1; margin-top:8px; }
-  .pm-info{ flex:1; margin-top:8px; padding-top:8px; }
+  .product-modal-overlay{ align-items:center; padding:30px; }
+  .product-modal{
+    max-width:900px;
+    min-height:0;
+    max-height:88vh;
+    overflow-y:auto;
+    border-radius:16px;
+    box-shadow:0 24px 60px rgba(42,29,20,0.35);
+    padding:36px 40px;
+  }
+  .pm-grid{ flex-direction:row; text-align:right; gap:40px; align-items:flex-start; }
+  .pm-gallery{ flex:1; margin-top:0; }
+  .pm-info{ flex:1; margin-top:0; padding-top:6px; }
 }
 
 @media (min-width:640px){
