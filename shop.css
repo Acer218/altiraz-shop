@@ -883,6 +883,32 @@ footer{
   color:#f3e9d8;
 }
 .pm-qty-block{ margin-bottom:18px; }
+.pm-action-stack{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.order-now-btn{
+  width:100%;
+  padding:14px;
+  background:transparent;
+  border:1.5px solid var(--espresso);
+  color:var(--espresso);
+  border-radius:8px;
+  font-size:15px;
+  font-weight:700;
+  cursor:pointer;
+  font-family:'Cairo', sans-serif;
+}
+.order-now-btn:hover{ background:rgba(42,29,20,0.06); }
+.pm-order-form{ text-align:right; margin-top:6px; }
+.pm-order-confirmed{
+  text-align:center;
+  padding:20px 10px;
+}
+.pm-order-confirmed h3{ font-size:18px; margin:0 0 6px; }
+.pm-order-confirmed p{ color:var(--muted); font-size:14px; margin:0 0 8px; }
+.pm-order-confirmed .preview-btn{ margin-top:10px; }
 .pm-qty-stepper{
   display:inline-flex;
   align-items:center;
