@@ -8,6 +8,7 @@ import java.util.List;
 
 public class OrdersHandler implements HttpHandler {
     private static final String ADMIN_PASSWORD = "i HATE MY LIFE218";
+    private static final String ORDER_TAKER_PASSWORD = "orders123";
     private final Gson gson = new Gson();
     private final OrderDao dao = new OrderDao();
 
@@ -58,7 +59,7 @@ public class OrdersHandler implements HttpHandler {
 
     private boolean checkAdmin(HttpExchange exchange){
         String header = exchange.getRequestHeaders().getFirst("X-Admin-Password");
-        return ADMIN_PASSWORD.equals(header);
+        return ADMIN_PASSWORD.equals(header) || ORDER_TAKER_PASSWORD.equals(header);
     }
 
     private String readBody(HttpExchange exchange) throws IOException {
