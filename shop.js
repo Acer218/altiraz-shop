@@ -304,7 +304,7 @@ function buildCustomerCardHtml(p){
         ${soldOut
           ? `<button class="add-cart-btn" disabled>نفذت الكمية</button>`
           : sizes.length > 0
-            ? `<button class="add-cart-btn view-detail-btn" data-id="${p.id}">اختر المقاس</button>`
+            ? ``
             : `<button class="add-cart-btn" data-id="${p.id}">أضف إلى السلة</button>`
         }
       </div>
@@ -319,10 +319,7 @@ function wireCustomerCards(container){
       openProductModal(Number(tagEl.dataset.id));
     });
   });
-  container.querySelectorAll(".view-detail-btn").forEach(btn => {
-    btn.addEventListener("click", () => openProductModal(Number(btn.dataset.id)));
-  });
-  container.querySelectorAll(".add-cart-btn:not([disabled]):not(.view-detail-btn)").forEach(btn => {
+  container.querySelectorAll(".add-cart-btn:not([disabled])").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = Number(btn.dataset.id);
       addToCart(id, null, 1);
