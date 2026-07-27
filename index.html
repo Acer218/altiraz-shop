@@ -1,1 +1,62 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الطراز</title>
+<meta name="description" content="الطراز متجر ليبي متخصص في الأزياء التقليدية الأصيلة. أثواب ورجالي وأطفال وأكسسوارات وعطور بلمسة تراثية فاخرة.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="الطراز | أزياء تقليدية ليبية أصيلة">
+<meta property="og:description" content="أثواب ورجالي وأطفال وأكسسوارات وعطور، بلمسة تراثية فاخرة. تصفّح واطلب مباشرة.">
+<meta property="og:image" content="https://acer218.github.io/altiraz-shop/og-image.png">
+<meta property="og:url" content="https://acer218.github.io/altiraz-shop/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="الطراز | أزياء تقليدية ليبية أصيلة">
+<meta name="twitter:description" content="أثواب ورجالي وأطفال وأكسسوارات وعطور، بلمسة تراثية فاخرة.">
+<meta name="twitter:image" content="https://acer218.github.io/altiraz-shop/og-image.png">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shop.css">
+</head>
+<body>
 
+<header>
+  <div class="header-top">
+    <div class="brand-group">
+      <div class="brand" id="brandLogo">الطراز</div>
+      <button class="header-cart-btn" id="headerCartBtn" aria-label="السلة">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V6a6 6 0 0112 0v3"/><path d="M3 9h18l-1.5 11.5a2 2 0 01-2 1.5H6.5a2 2 0 01-2-1.5L3 9z"/></svg>
+        <span class="cart-badge" id="cartBadge">0</span>
+      </button>
+    </div>
+  </div>
+  <div class="header-search">
+    <input type="text" id="globalSearch" placeholder="ابحث عن منتج..." autocomplete="off">
+    <button id="globalSearchBtn" aria-label="بحث">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </button>
+  </div>
+  <nav id="navButtons"></nav>
+</header>
+
+<div class="admin-banner" id="adminBanner" style="display:none;"></div>
+
+<main id="main">
+  <div class="loading">جاري التحميل…</div>
+</main>
+
+<footer>
+  <div class="footer-brand">الطراز &middot; أزياء تقليدية ليبية أصيلة</div>
+  <div class="footer-contact">
+    للطلب أو الاستفسار
+    <a class="mono" href="tel:0925016142">0925016142</a>
+    <a class="whatsapp-btn" href="https://wa.me/218925016142" target="_blank" rel="noopener">واتساب</a>
+  </div>
+  <button class="secret-dot" id="secretDot" aria-hidden="true" tabindex="-1"></button>
+</footer>
+
+<script src="shop.js"></script>
+</body>
+</html>
