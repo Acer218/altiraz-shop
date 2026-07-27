@@ -11,7 +11,7 @@ public class ProductDao {
 
     public List<Product> getAll() throws Exception {
         Map<Integer, Product> map = new LinkedHashMap<>();
-        String sql = "SELECT p.id, p.name, p.description, p.category, p.price, p.sizes, p.in_stock, p.featured, i.image_data " +
+        String sql = "SELECT p.id, p.name, p.description, p.category, p.price, p.compare_at_price, p.sizes, p.in_stock, p.featured, i.image_data " +
                      "FROM products p LEFT JOIN product_images i ON i.product_id = p.id " +
                      "ORDER BY p.id DESC, i.sort_order ASC";
         try(Connection con = Db.getConnection();
@@ -24,6 +24,8 @@ public class ProductDao {
                     p = new Product(id, rs.getString("name"), rs.getString("description"),
                             rs.getString("category"), rs.getDouble("price"), new ArrayList<>(),
                             parseSizes(rs.getString("sizes")), rs.getBoolean("in_stock"), rs.getBoolean("featured"));
+                    double cap = rs.getDouble("compare_at_price");
+                    p.compareAtPrice = rs.wasNull() ? null : cap;
                     map.put(id, p);
                 }
                 String img = rs.getString("image_data");
@@ -36,16 +38,18 @@ public class ProductDao {
     }
 
     public Product create(Product p) throws Exception {
-        String sql = "INSERT INTO products (name, description, category, price, sizes, in_stock, featured) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO products (name, description, category, price, compare_at_price, sizes, in_stock, featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try(Connection con = Db.getConnection();
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
             ps.setString(1, p.name);
             ps.setString(2, p.description);
             ps.setString(3, p.category);
             ps.setDouble(4, p.price);
-            ps.setString(5, joinSizes(p.sizes));
-            ps.setBoolean(6, p.inStock);
-            ps.setBoolean(7, p.featured);
+            if(p.compareAtPrice != null) ps.setDouble(5, p.compareAtPrice);
+            else ps.setNull(5, java.sql.Types.NUMERIC);
+            ps.setString(6, joinSizes(p.sizes));
+            ps.setBoolean(7, p.inStock);
+            ps.setBoolean(8, p.featured);
             ps.executeUpdate();
             try(ResultSet keys = ps.getGeneratedKeys()){
                 keys.next();
@@ -57,17 +61,19 @@ public class ProductDao {
     }
 
     public void update(Product p) throws Exception {
-        String sql = "UPDATE products SET name=?, description=?, category=?, price=?, sizes=?, in_stock=?, featured=? WHERE id=?";
+        String sql = "UPDATE products SET name=?, description=?, category=?, price=?, compare_at_price=?, sizes=?, in_stock=?, featured=? WHERE id=?";
         try(Connection con = Db.getConnection();
             PreparedStatement ps = con.prepareStatement(sql)){
             ps.setString(1, p.name);
             ps.setString(2, p.description);
             ps.setString(3, p.category);
             ps.setDouble(4, p.price);
-            ps.setString(5, joinSizes(p.sizes));
-            ps.setBoolean(6, p.inStock);
-            ps.setBoolean(7, p.featured);
-            ps.setInt(8, p.id);
+            if(p.compareAtPrice != null) ps.setDouble(5, p.compareAtPrice);
+            else ps.setNull(5, java.sql.Types.NUMERIC);
+            ps.setString(6, joinSizes(p.sizes));
+            ps.setBoolean(7, p.inStock);
+            ps.setBoolean(8, p.featured);
+            ps.setInt(9, p.id);
             ps.executeUpdate();
 
             try(PreparedStatement del = con.prepareStatement("DELETE FROM product_images WHERE product_id=?")){
