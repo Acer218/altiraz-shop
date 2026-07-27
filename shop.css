@@ -911,17 +911,30 @@ footer{
 @media (min-width:700px){
   .product-modal-overlay{ align-items:center; padding:30px; }
   .product-modal{
-    max-width:900px;
+    max-width:1140px;
     min-height:0;
-    max-height:88vh;
+    max-height:90vh;
     overflow-y:auto;
     border-radius:16px;
     box-shadow:0 24px 60px rgba(42,29,20,0.35);
-    padding:36px 40px;
+    padding:44px 48px;
   }
-  .pm-grid{ flex-direction:row; text-align:right; gap:40px; align-items:flex-start; }
-  .pm-gallery{ flex:1; margin-top:0; }
-  .pm-info{ flex:1; margin-top:0; padding-top:6px; }
+  .pm-grid{ flex-direction:row; text-align:right; gap:48px; align-items:flex-start; }
+  .pm-gallery{ flex:1.15; margin-top:0; }
+  .pm-info{ flex:1; margin-top:0; padding-top:10px; }
+  .product-modal-img{ max-height:68vh; }
+  .product-modal-thumbs img{ width:68px; height:84px; }
+  .product-modal-name{ font-size:30px; margin:8px 0 12px; }
+  .product-modal-desc{ font-size:16.5px; line-height:1.8; margin:0 0 18px; }
+  .pm-price-block .tag-price{ font-size:22px; padding:5px 14px; }
+  .pm-price-block .tag-price-old{ font-size:15px; }
+  .pm-size-label{ font-size:14px; }
+  .pm-size-btn{ min-width:52px; padding:11px 16px; font-size:15px; }
+  .pm-qty-stepper button{ width:46px; height:46px; font-size:20px; }
+  .pm-qty-stepper span{ min-width:44px; font-size:17px; }
+  .pm-info .primary-btn{ font-size:17px; padding:15px; }
+  .modal-close{ width:40px; height:40px; font-size:17px; }
+  .pm-nav{ width:46px; height:46px; font-size:26px; }
 }
 
 @media (min-width:640px){
