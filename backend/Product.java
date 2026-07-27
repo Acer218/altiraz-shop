@@ -6,6 +6,7 @@ public class Product {
     public String description;
     public String category;
     public double price;
+    public Double compareAtPrice;
     public List<String> images;
     public List<String> sizes;
     public boolean inStock;
