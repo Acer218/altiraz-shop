@@ -1,8 +1,13 @@
 const ADMIN_PASSWORD = "i HATE MY LIFE218";
+const STAFF_PASSWORD = "orders123";
 const API_BASE = "https://altiraz-backend.onrender.com/api";
 const CART_KEY = "altirazCart";
+const CUSTOMER_INFO_KEY = "altirazCustomerInfo";
 const WHATSAPP_NUMBER = "218925016142";
 let adminPasswordEntered = "";
+let staffUnlocked = false;
+let staffPasswordEntered = "";
+let cartTaps = [];
 
 const CATEGORIES = [
   { key: "women", label: "اثواب", tagline: "أثواب تقليدية فاخرة مستوحاة من التراث الليبي" },
@@ -44,6 +49,36 @@ function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
+function authHeader(){
+  return adminPasswordEntered || staffPasswordEntered;
+}
+
+function getSavedCustomerInfo(){
+  try{
+    const raw = localStorage.getItem(CUSTOMER_INFO_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function saveCustomerInfo(name, phone, location){
+  try{ localStorage.setItem(CUSTOMER_INFO_KEY, JSON.stringify({ name, phone, location })); }
+  catch(e){ /* ignore, quick-order will just ask again next time */ }
+}
+
+async function placeQuickOrder(p, size, qty, info){
+  const payload = {
+    name: info.name, phone: info.phone, location: info.location,
+    total: p.price * qty,
+    items: [{ productId: p.id, name: p.name, price: p.price, qty, size }]
+  };
+  const res = await fetch(`${API_BASE}/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if(!res.ok) throw new Error("order failed");
+  return await res.json();
+}
+
 /* products & orders now live in Postgres via the Java API */
 async function loadProducts(){
   try{
@@ -74,7 +109,7 @@ function saveCart(){
 }
 async function loadOrders(){
   try{
-    const res = await fetch(`${API_BASE}/orders`, { headers: { "X-Admin-Password": adminPasswordEntered } });
+    const res = await fetch(`${API_BASE}/orders`, { headers: { "X-Admin-Password": authHeader() } });
     const data = await res.json();
     orders = (res.ok && Array.isArray(data)) ? data : [];
   }catch(e){
@@ -88,7 +123,7 @@ function buildNav(){
   for(const c of CATEGORIES){
     html += `<button data-view="category" data-cat="${c.key}">${c.label}</button>`;
   }
-  if(adminUnlocked){
+  if(adminUnlocked || staffUnlocked){
     html += `<button data-view="orders">الطلبات</button>`;
   }
   navEl.innerHTML = html;
@@ -162,6 +197,18 @@ function renderBanner(){
     document.getElementById("logoutBtn").addEventListener("click", () => {
       adminUnlocked = false;
       adminPasswordEntered = "";
+      if(view === "orders") view = "home";
+      buildNav();
+      setActiveNav();
+      renderBanner();
+      render();
+    });
+  } else if(staffUnlocked){
+    bannerEl.style.display = "flex";
+    bannerEl.innerHTML = `وضع استلام الطلبات مفعّل <button id="logoutBtn">تسجيل الخروج</button>`;
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      staffUnlocked = false;
+      staffPasswordEntered = "";
       if(view === "orders") view = "home";
       buildNav();
       setActiveNav();
@@ -799,6 +846,7 @@ async function handleConfirmOrder(rows, total){
     if(!res.ok) throw new Error("order failed");
     const created = await res.json();
     lastOrderId = created && created.id ? created.id : null;
+    saveCustomerInfo(name, phone, location);
 
     cart = [];
     saveCart();
@@ -845,7 +893,7 @@ function renderOrders(){
       try{
         await fetch(`${API_BASE}/orders/${btn.dataset.id}`, {
           method: "DELETE",
-          headers: { "X-Admin-Password": adminPasswordEntered }
+          headers: { "X-Admin-Password": authHeader() }
         });
       }catch(e){ /* ignore, list will just show it again on next load if delete failed */ }
       await loadOrders();
@@ -864,6 +912,8 @@ function openProductModal(id){
   const discount = discountPercent(p);
   let selectedSize = sizes.length > 0 ? sizes[0] : null;
   let qty = 1;
+  let orderNowStep = "product"; // product | form | confirmed
+  let quickOrderId = null;
 
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay product-modal-overlay";
@@ -895,7 +945,8 @@ function openProductModal(id){
               ${discount ? `<span class="tag-price-old mono">${p.compareAtPrice.toFixed(2)} د.ل</span>` : ``}
               <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
             </div>
-            ${soldOut ? `<p class="sold-out-text">نفذت الكمية حاليًا</p>` : `
+            ${soldOut ? `<p class="sold-out-text">نفذت الكمية حاليًا</p>` : ``}
+            ${(!soldOut && orderNowStep === "product") ? `
               ${(!adminUnlocked && sizes.length > 0) ? `
                 <div class="pm-size-block">
                   <div class="pm-size-label">المقاس</div>
@@ -913,9 +964,40 @@ function openProductModal(id){
                     <button type="button" id="pmQtyPlus">+</button>
                   </div>
                 </div>
-                <button class="primary-btn" id="pmAddCart" style="margin-top:6px;">أضف إلى السلة</button>
+                <div class="pm-action-stack">
+                  <button class="primary-btn" id="pmAddCart">أضف إلى السلة</button>
+                  <button class="order-now-btn" id="pmOrderNow">اطلب الآن</button>
+                </div>
               ` : ``}
-            `}
+            ` : ``}
+            ${(!soldOut && orderNowStep === "form") ? `
+              <div class="panel pm-order-form">
+                <h3>بيانات التوصيل</h3>
+                <div class="field">
+                  <label for="qName">الاسم</label>
+                  <input type="text" id="qName" placeholder="اسمك الكامل">
+                </div>
+                <div class="field">
+                  <label for="qPhone">رقم الهاتف</label>
+                  <input type="tel" id="qPhone" inputmode="numeric" maxlength="10" placeholder="09xxxxxxxx">
+                </div>
+                <div class="field">
+                  <label for="qLocation">الموقع</label>
+                  <input type="text" id="qLocation" placeholder="المدينة، الحي، أقرب نقطة دالة">
+                </div>
+                <button class="primary-btn" id="qConfirmBtn">تأكيد الطلب</button>
+                <button class="ghost-btn" id="qCancelBtn">رجوع</button>
+                <p class="form-error" id="qOrderMsg"></p>
+              </div>
+            ` : ``}
+            ${orderNowStep === "confirmed" ? `
+              <div class="pm-order-confirmed">
+                <h3>تم استلام طلبك بنجاح</h3>
+                ${quickOrderId ? `<p class="order-ref mono">رقم الطلب: #${quickOrderId}</p>` : ``}
+                <p>سنتواصل معك قريبًا لتأكيد التفاصيل والتوصيل.</p>
+                <button class="preview-btn" id="qCloseBtn">إغلاق</button>
+              </div>
+            ` : ``}
           </div>
         </div>
       </div>
@@ -951,6 +1033,69 @@ function openProductModal(id){
         setTimeout(() => { closeProductModal(); }, 500);
       });
     }
+    const orderNowBtn = overlay.querySelector("#pmOrderNow");
+    if(orderNowBtn){
+      orderNowBtn.addEventListener("click", async () => {
+        const saved = getSavedCustomerInfo();
+        if(saved){
+          orderNowBtn.disabled = true;
+          orderNowBtn.textContent = "جاري إرسال الطلب...";
+          try{
+            const created = await placeQuickOrder(p, selectedSize, qty, saved);
+            quickOrderId = created && created.id ? created.id : null;
+            orderNowStep = "confirmed";
+            draw();
+          }catch(e){
+            orderNowStep = "form";
+            draw();
+          }
+        } else {
+          orderNowStep = "form";
+          draw();
+        }
+      });
+    }
+    const qCancelBtn = overlay.querySelector("#qCancelBtn");
+    if(qCancelBtn) qCancelBtn.addEventListener("click", () => { orderNowStep = "product"; draw(); });
+    const qConfirmBtn = overlay.querySelector("#qConfirmBtn");
+    if(qConfirmBtn){
+      const qPhoneInput = overlay.querySelector("#qPhone");
+      if(qPhoneInput){
+        qPhoneInput.addEventListener("input", () => {
+          qPhoneInput.value = qPhoneInput.value.replace(/[^0-9]/g, "").slice(0, 10);
+        });
+      }
+      qConfirmBtn.addEventListener("click", async () => {
+        const name = overlay.querySelector("#qName").value.trim();
+        const phone = overlay.querySelector("#qPhone").value.trim();
+        const location = overlay.querySelector("#qLocation").value.trim();
+        const msg = overlay.querySelector("#qOrderMsg");
+        if(!name || !phone || !location){
+          msg.className = "form-error";
+          msg.textContent = "املأ الاسم ورقم الهاتف والموقع لإتمام الطلب.";
+          return;
+        }
+        if(!/^[0-9]{10}$/.test(phone)){
+          msg.className = "form-error";
+          msg.textContent = "رقم الهاتف يجب أن يتكون من 10 أرقام بالضبط.";
+          return;
+        }
+        qConfirmBtn.disabled = true;
+        try{
+          const created = await placeQuickOrder(p, selectedSize, qty, { name, phone, location });
+          saveCustomerInfo(name, phone, location);
+          quickOrderId = created && created.id ? created.id : null;
+          orderNowStep = "confirmed";
+          draw();
+        }catch(e){
+          qConfirmBtn.disabled = false;
+          msg.className = "form-error";
+          msg.textContent = "تعذر إرسال الطلب. تحقق من الاتصال وحاول مرة أخرى.";
+        }
+      });
+    }
+    const qCloseBtn = overlay.querySelector("#qCloseBtn");
+    if(qCloseBtn) qCloseBtn.addEventListener("click", closeProductModal);
   }
   draw();
 
@@ -1024,9 +1169,64 @@ function registerLogoTap(){
     if(!adminUnlocked && !gateOpen) openGate();
   }
 }
+
+/* hidden order-taker (staff) access via the cart icon */
+let staffGateOpen = false;
+function openStaffGate(){
+  staffGateOpen = true;
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "staffGateOverlay";
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h2>دخول استلام الطلبات</h2>
+      <p>أدخل كلمة المرور للاطلاع على الطلبات</p>
+      <div class="gate-error" id="staffGateError"></div>
+      <input type="password" id="staffGatePass" placeholder="كلمة المرور">
+      <button class="primary-btn" id="staffGateSubmit">دخول</button>
+      <button class="ghost-btn" id="staffGateCancel">إلغاء</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const input = document.getElementById("staffGatePass");
+  const err = document.getElementById("staffGateError");
+  function tryUnlock(){
+    if(input.value === STAFF_PASSWORD){
+      staffUnlocked = true;
+      staffPasswordEntered = input.value;
+      closeStaffGate();
+      buildNav();
+      setActiveNav();
+      goOrders();
+    } else {
+      err.textContent = "كلمة المرور غير صحيحة.";
+    }
+  }
+  document.getElementById("staffGateSubmit").addEventListener("click", tryUnlock);
+  document.getElementById("staffGateCancel").addEventListener("click", closeStaffGate);
+  overlay.addEventListener("click", e => { if(e.target === overlay) closeStaffGate(); });
+  input.addEventListener("keydown", e => { if(e.key === "Enter") tryUnlock(); });
+  input.focus();
+}
+function closeStaffGate(){
+  staffGateOpen = false;
+  const overlay = document.getElementById("staffGateOverlay");
+  if(overlay) overlay.remove();
+}
+function registerCartTap(){
+  if(adminUnlocked || staffUnlocked) return;
+  const now = Date.now();
+  cartTaps = cartTaps.filter(t => now - t < 2500);
+  cartTaps.push(now);
+  if(cartTaps.length >= 5){
+    cartTaps = [];
+    if(!gateOpen && !staffGateOpen) openStaffGate();
+  }
+}
+
 brandEl.addEventListener("click", registerLogoTap);
 secretDot.addEventListener("click", () => { if(!adminUnlocked && !gateOpen) openGate(); });
-headerCartBtn.addEventListener("click", goCart);
+headerCartBtn.addEventListener("click", () => { goCart(); registerCartTap(); });
 globalSearchBtn.addEventListener("click", () => goSearchGlobal(globalSearchInput.value));
 globalSearchInput.addEventListener("keydown", e => {
   if(e.key === "Enter") goSearchGlobal(globalSearchInput.value);
