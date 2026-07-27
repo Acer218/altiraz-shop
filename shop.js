@@ -278,25 +278,35 @@ function renderCategory(key){
   renderCategoryGrid(key);
 }
 
+function discountPercent(p){
+  if(p.compareAtPrice && p.compareAtPrice > p.price){
+    return Math.round((p.compareAtPrice - p.price) / p.compareAtPrice * 100);
+  }
+  return null;
+}
+
 function buildCustomerCardHtml(p){
   const sizes = p.sizes || [];
   const soldOut = p.inStock === false;
+  const discount = discountPercent(p);
   return `
     <div class="tag" data-id="${p.id}">
       <img class="tag-img" src="${p.images[0]}" alt="${escapeHtml(p.name)}">
       ${soldOut ? `<span class="sold-out-badge">نفذت الكمية</span>` : ``}
+      ${discount ? `<span class="discount-badge">خصم ${discount}%</span>` : ``}
       <h3 class="tag-name">${escapeHtml(p.name)}</h3>
       <p class="tag-desc">${escapeHtml(p.description)}</p>
-      ${(sizes.length > 0 && !soldOut) ? `
-        <div class="size-select-wrap">
-          <select class="size-select" data-id="${p.id}">
-            ${sizes.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
-          </select>
-        </div>
-      ` : ``}
       <div class="tag-footer">
-        <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
-        ${soldOut ? `<button class="add-cart-btn" disabled>نفذت الكمية</button>` : `<button class="add-cart-btn" data-id="${p.id}">أضف إلى السلة</button>`}
+        <div class="price-block">
+          ${discount ? `<span class="tag-price-old mono">${p.compareAtPrice.toFixed(2)} د.ل</span>` : ``}
+          <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
+        </div>
+        ${soldOut
+          ? `<button class="add-cart-btn" disabled>نفذت الكمية</button>`
+          : sizes.length > 0
+            ? `<button class="add-cart-btn view-detail-btn" data-id="${p.id}">اختر المقاس</button>`
+            : `<button class="add-cart-btn" data-id="${p.id}">أضف إلى السلة</button>`
+        }
       </div>
     </div>
   `;
@@ -305,16 +315,17 @@ function buildCustomerCardHtml(p){
 function wireCustomerCards(container){
   container.querySelectorAll(".tag").forEach(tagEl => {
     tagEl.addEventListener("click", (e) => {
-      if(e.target.closest("button") || e.target.closest("select")) return;
+      if(e.target.closest("button")) return;
       openProductModal(Number(tagEl.dataset.id));
     });
   });
-  container.querySelectorAll(".add-cart-btn:not([disabled])").forEach(btn => {
+  container.querySelectorAll(".view-detail-btn").forEach(btn => {
+    btn.addEventListener("click", () => openProductModal(Number(btn.dataset.id)));
+  });
+  container.querySelectorAll(".add-cart-btn:not([disabled]):not(.view-detail-btn)").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = Number(btn.dataset.id);
-      const sizeSelect = container.querySelector(`.size-select[data-id="${id}"]`);
-      const size = sizeSelect ? sizeSelect.value : null;
-      addToCart(id, size, 1);
+      addToCart(id, null, 1);
       const original = btn.textContent;
       btn.textContent = "أُضيفت ✓";
       btn.disabled = true;
@@ -443,6 +454,10 @@ function renderAdminForm(catKey){
         <input type="number" id="fPrice" min="0" step="0.01" placeholder="0.00" value="${editing ? editing.price : ""}">
       </div>
       <div class="field">
+        <label for="fComparePrice">السعر الأصلي قبل الخصم (اختياري، اتركه فارغًا إذا لا يوجد خصم)</label>
+        <input type="number" id="fComparePrice" min="0" step="0.01" placeholder="0.00" value="${editing && editing.compareAtPrice ? editing.compareAtPrice : ""}">
+      </div>
+      <div class="field">
         <label for="fSizes">المقاسات (افصل بينها بفاصلة، اتركها فارغة إذا لا يوجد مقاسات)</label>
         <input type="text" id="fSizes" placeholder="مثال: S, M, L, XL" value="${escapeHtml(sizesValue)}">
       </div>
@@ -540,6 +555,7 @@ async function handleSave(catKey){
   const description = document.getElementById("fDesc").value.trim();
   const category = document.getElementById("fCat").value;
   const price = document.getElementById("fPrice").value;
+  const comparePrice = document.getElementById("fComparePrice").value;
   const sizesRaw = document.getElementById("fSizes").value;
   const inStock = document.getElementById("fInStock").checked;
   const featured = document.getElementById("fFeatured").checked;
@@ -557,9 +573,15 @@ async function handleSave(catKey){
     msg.textContent = "أدخل سعرًا صحيحًا.";
     return;
   }
+  if(comparePrice && (isNaN(Number(comparePrice)) || Number(comparePrice) < 0)){
+    msg.className = "form-error";
+    msg.textContent = "أدخل السعر الأصلي بشكل صحيح، أو اتركه فارغًا.";
+    return;
+  }
 
   const sizes = sizesRaw.split(",").map(s => s.trim()).filter(s => s.length > 0);
-  const payload = { name, description, category, price: Number(price), images, sizes, inStock, featured };
+  const compareAtPrice = comparePrice ? Number(comparePrice) : null;
+  const payload = { name, description, category, price: Number(price), compareAtPrice, images, sizes, inStock, featured };
   const saveBtn = document.getElementById("saveBtn");
   saveBtn.disabled = true;
 
@@ -611,6 +633,7 @@ async function toggleFeatured(id, catKey){
     description: p.description,
     category: p.category,
     price: p.price,
+    compareAtPrice: p.compareAtPrice || null,
     images: p.images,
     sizes: p.sizes || [],
     inStock: p.inStock !== false,
@@ -842,6 +865,7 @@ function openProductModal(id){
   let galleryIndex = 0;
   const sizes = p.sizes || [];
   const soldOut = p.inStock === false;
+  const discount = discountPercent(p);
   let selectedSize = sizes.length > 0 ? sizes[0] : null;
   let qty = 1;
 
@@ -870,7 +894,11 @@ function openProductModal(id){
           <div class="pm-info">
             <h3 class="product-modal-name">${escapeHtml(p.name)}</h3>
             <p class="product-modal-desc">${escapeHtml(p.description)}</p>
-            <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
+            ${discount ? `<span class="discount-badge pm-discount-badge">خصم ${discount}%</span>` : ``}
+            <div class="price-block pm-price-block">
+              ${discount ? `<span class="tag-price-old mono">${p.compareAtPrice.toFixed(2)} د.ل</span>` : ``}
+              <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
+            </div>
             ${soldOut ? `<p class="sold-out-text">نفذت الكمية حاليًا</p>` : `
               ${(!adminUnlocked && sizes.length > 0) ? `
                 <div class="pm-size-block">
