@@ -920,12 +920,12 @@ function openProductModal(id){
         </div>
       </div>
     `;
-    document.getElementById("closeProductModal").addEventListener("click", closeProductModal);
+    overlay.querySelector("#closeProductModal").addEventListener("click", closeProductModal);
     overlay.querySelectorAll(".pm-thumb").forEach(t => {
       t.addEventListener("click", () => { galleryIndex = Number(t.dataset.i); draw(); });
     });
-    const prevBtn = document.getElementById("pmPrev");
-    const nextBtn = document.getElementById("pmNext");
+    const prevBtn = overlay.querySelector("#pmPrev");
+    const nextBtn = overlay.querySelector("#pmNext");
     if(prevBtn) prevBtn.addEventListener("click", () => {
       galleryIndex = (galleryIndex - 1 + p.images.length) % p.images.length;
       draw();
@@ -937,11 +937,11 @@ function openProductModal(id){
     overlay.querySelectorAll(".pm-size-btn").forEach(btn => {
       btn.addEventListener("click", () => { selectedSize = btn.dataset.size; draw(); });
     });
-    const qtyMinus = document.getElementById("pmQtyMinus");
-    const qtyPlus = document.getElementById("pmQtyPlus");
+    const qtyMinus = overlay.querySelector("#pmQtyMinus");
+    const qtyPlus = overlay.querySelector("#pmQtyPlus");
     if(qtyMinus) qtyMinus.addEventListener("click", () => { if(qty > 1) qty--; draw(); });
     if(qtyPlus) qtyPlus.addEventListener("click", () => { qty++; draw(); });
-    const addBtn = document.getElementById("pmAddCart");
+    const addBtn = overlay.querySelector("#pmAddCart");
     if(addBtn){
       addBtn.addEventListener("click", () => {
         addToCart(p.id, selectedSize, qty);
