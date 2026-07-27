@@ -223,7 +223,6 @@ function renderHome(){
   });
   mainEl.querySelectorAll(".preview-grid img").forEach(img => {
     img.addEventListener("click", () => {
-      goCategory(img.dataset.cat);
       openProductModal(Number(img.dataset.id));
     });
   });
