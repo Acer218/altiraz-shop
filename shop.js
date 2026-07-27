@@ -351,10 +351,14 @@ function renderCategoryGrid(key){
     html += '<div class="grid">';
     for(const p of items){
       const soldOut = p.inStock === false;
+      const isFeatured = p.featured === true;
       html += `
         <div class="tag" data-id="${p.id}">
           <img class="tag-img" src="${p.images[0]}" alt="${escapeHtml(p.name)}">
           ${soldOut ? `<span class="sold-out-badge">نفذت الكمية</span>` : ``}
+          <button type="button" class="feature-star ${isFeatured ? "active" : ""}" data-id="${p.id}" title="${isFeatured ? "إزالة من المختارات المميزة" : "إضافة إلى المختارات المميزة"}">
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          </button>
           <h3 class="tag-name">${escapeHtml(p.name)}</h3>
           <p class="tag-desc">${escapeHtml(p.description)}</p>
           <div class="tag-footer">
@@ -377,6 +381,7 @@ function renderCategoryGrid(key){
     });
     container.querySelectorAll(".tag-edit").forEach(btn => btn.addEventListener("click", () => startEdit(Number(btn.dataset.id), key)));
     container.querySelectorAll(".tag-del").forEach(btn => btn.addEventListener("click", () => handleDelete(Number(btn.dataset.id), key)));
+    container.querySelectorAll(".feature-star").forEach(btn => btn.addEventListener("click", () => toggleFeatured(Number(btn.dataset.id), key)));
   } else {
     html = '<div class="grid">' + items.map(buildCustomerCardHtml).join("") + '</div>';
     container.innerHTML = html;
@@ -596,6 +601,31 @@ async function handleDelete(id, catKey){
     saveCart();
     renderCategory(catKey);
   }catch(e){ /* leave the item in place if the server call failed */ }
+}
+
+async function toggleFeatured(id, catKey){
+  const p = products.find(p => p.id === id);
+  if(!p) return;
+  const payload = {
+    name: p.name,
+    description: p.description,
+    category: p.category,
+    price: p.price,
+    images: p.images,
+    sizes: p.sizes || [],
+    inStock: p.inStock !== false,
+    featured: !(p.featured === true)
+  };
+  try{
+    const res = await fetch(`${API_BASE}/products/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok) throw new Error("toggle failed");
+    await refreshProducts();
+    renderCategoryGrid(catKey);
+  }catch(e){ /* star just won't flip visually if the request failed */ }
 }
 
 /* cart (id + size uniquely identify a cart line) */
