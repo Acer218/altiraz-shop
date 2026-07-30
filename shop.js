@@ -1238,10 +1238,10 @@ let lastScrollY = window.scrollY;
 let scrollTicking = false;
 function handleHeaderScroll(){
   const currentY = window.scrollY;
-  if(currentY > lastScrollY && currentY > 80){
-    headerEl.classList.add("header-hidden");
-  } else if(currentY < lastScrollY){
+  if(currentY <= 10){
     headerEl.classList.remove("header-hidden");
+  } else if(currentY > lastScrollY){
+    headerEl.classList.add("header-hidden");
   }
   lastScrollY = currentY;
   scrollTicking = false;
