@@ -235,7 +235,7 @@ function renderHome(){
   if(featuredItems.length > 0){
     html += `
       <div class="featured-section reveal">
-        <h2>مختارات مميزة</h2>
+        <h2>مميز</h2>
         <div class="featured-scroll" id="featuredScroll"></div>
       </div>
     `;
@@ -508,7 +508,7 @@ function renderAdminForm(catKey){
         <label for="fInStock"><input type="checkbox" id="fInStock" ${inStockChecked ? "checked" : ""}> متوفر في المخزون</label>
       </div>
       <div class="field field-checkbox">
-        <label for="fFeatured"><input type="checkbox" id="fFeatured" ${featuredChecked ? "checked" : ""}> إظهار في "مختارات مميزة" بالصفحة الرئيسية</label>
+        <label for="fFeatured"><input type="checkbox" id="fFeatured" ${featuredChecked ? "checked" : ""}> إظهار في "مميز" بالصفحة الرئيسية</label>
       </div>
       <div class="field">
         <label for="fImage">الصور (يمكن اختيار أكثر من صورة، الصورة الأولى هي التي تظهر في المتجر)</label>
