@@ -1232,6 +1232,27 @@ globalSearchInput.addEventListener("keydown", e => {
   if(e.key === "Enter") goSearchGlobal(globalSearchInput.value);
 });
 
+/* hide header on scroll down, reveal on scroll up */
+const headerEl = document.querySelector("header");
+let lastScrollY = window.scrollY;
+let scrollTicking = false;
+function handleHeaderScroll(){
+  const currentY = window.scrollY;
+  if(currentY > lastScrollY && currentY > 80){
+    headerEl.classList.add("header-hidden");
+  } else if(currentY < lastScrollY){
+    headerEl.classList.remove("header-hidden");
+  }
+  lastScrollY = currentY;
+  scrollTicking = false;
+}
+window.addEventListener("scroll", () => {
+  if(!scrollTicking){
+    requestAnimationFrame(handleHeaderScroll);
+    scrollTicking = true;
+  }
+});
+
 /* init */
 (async function init(){
   loadCart();
