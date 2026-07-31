@@ -861,6 +861,8 @@ async function handleConfirmOrder(rows, total){
 }
 
 /* orders (admin) */
+const ORDER_STATUS_LABELS = { pending: "قيد التنفيذ", delivered: "تم التسليم", cancelled: "ملغي" };
+
 function renderOrders(){
   let html = `<div class="cat-top"><h2>الطلبات</h2></div>`;
   if(orders.length === 0){
@@ -869,8 +871,9 @@ function renderOrders(){
     html += '<div class="order-list">';
     for(const o of [...orders].reverse()){
       const d = new Date(o.date);
+      const status = o.status || "pending";
       html += `
-        <div class="order-card">
+        <div class="order-card status-${status}">
           <div class="order-head">
             <span class="order-name">${escapeHtml(o.name)} <span class="order-id mono">#${o.id}</span></span>
             <button class="tag-del" data-id="${o.id}">حذف</button>
@@ -881,6 +884,14 @@ function renderOrders(){
             ${o.items.map(i => `<div>${escapeHtml(i.name)}${i.size ? ` (${escapeHtml(i.size)})` : ``} &times; ${i.qty} — ${i.price.toFixed(2)} د.ل</div>`).join("")}
           </div>
           <div class="order-total mono">الإجمالي: ${o.total.toFixed(2)} د.ل</div>
+          <div class="order-status-row">
+            <span class="order-status-badge status-badge-${status}">${ORDER_STATUS_LABELS[status] || status}</span>
+            <div class="order-status-actions">
+              <button class="status-btn ${status === "pending" ? "active" : ""}" data-id="${o.id}" data-status="pending">قيد التنفيذ</button>
+              <button class="status-btn ${status === "delivered" ? "active" : ""}" data-id="${o.id}" data-status="delivered">تم التسليم</button>
+              <button class="status-btn ${status === "cancelled" ? "active" : ""}" data-id="${o.id}" data-status="cancelled">ملغي</button>
+            </div>
+          </div>
           <div class="order-date">${d.toLocaleString("ar")}</div>
         </div>
       `;
@@ -888,6 +899,19 @@ function renderOrders(){
     html += '</div>';
   }
   mainEl.innerHTML = html;
+  mainEl.querySelectorAll(".status-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try{
+        await fetch(`${API_BASE}/orders/${btn.dataset.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "X-Admin-Password": authHeader() },
+          body: JSON.stringify({ status: btn.dataset.status })
+        });
+      }catch(e){ /* ignore, list will just show the old status if this failed */ }
+      await loadOrders();
+      renderOrders();
+    });
+  });
   mainEl.querySelectorAll(".order-card .tag-del").forEach(btn => {
     btn.addEventListener("click", async () => {
       try{
