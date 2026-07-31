@@ -7,5 +7,6 @@ public class Order {
     public String location;
     public double total;
     public String date;
+    public String status;
     public List<OrderItem> items;
 }
