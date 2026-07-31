@@ -33,6 +33,7 @@ public class OrdersHandler implements HttpHandler {
             if(method.equals("POST") && id == null){
                 Order o = gson.fromJson(readBody(exchange), Order.class);
                 Order created = dao.create(o);
+                new Thread(() -> TelegramNotifier.sendOrderAlert(created)).start();
                 sendJson(exchange, 201, gson.toJson(created));
                 return;
             }
