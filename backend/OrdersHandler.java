@@ -46,6 +46,10 @@ public class OrdersHandler implements HttpHandler {
             if(method.equals("GET") && id == null){
                 List<Order> orders = dao.getAll();
                 sendJson(exchange, 200, gson.toJson(orders));
+            } else if(method.equals("PUT") && id != null){
+                Order o = gson.fromJson(readBody(exchange), Order.class);
+                dao.updateStatus(id, o.status);
+                sendJson(exchange, 200, "{\"updated\":true}");
             } else if(method.equals("DELETE") && id != null){
                 dao.delete(id);
                 sendJson(exchange, 200, "{\"deleted\":true}");
