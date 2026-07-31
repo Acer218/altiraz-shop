@@ -37,12 +37,13 @@ public class OrderDao {
                 ips.executeBatch();
             }
         }
+        o.status = "pending";
         return o;
     }
 
     public List<Order> getAll() throws Exception {
         Map<Integer, Order> map = new LinkedHashMap<>();
-        String sql = "SELECT o.id, o.customer_name, o.phone, o.location, o.total_price, o.created_at, " +
+        String sql = "SELECT o.id, o.customer_name, o.phone, o.location, o.total_price, o.created_at, o.status, " +
                      "i.product_name, i.price, i.quantity, i.size " +
                      "FROM orders o LEFT JOIN order_items i ON i.order_id = o.id " +
                      "ORDER BY o.id DESC";
@@ -59,6 +60,7 @@ public class OrderDao {
                     o.phone = rs.getString("phone");
                     o.location = rs.getString("location");
                     o.total = rs.getDouble("total_price");
+                    o.status = rs.getString("status");
                     Timestamp ts = rs.getTimestamp("created_at");
                     o.date = ts.toInstant().toString();
                     o.items = new ArrayList<>();
@@ -76,6 +78,16 @@ public class OrderDao {
             }
         }
         return new ArrayList<>(map.values());
+    }
+
+    public void updateStatus(int id, String status) throws Exception {
+        String sql = "UPDATE orders SET status=? WHERE id=?";
+        try(Connection con = Db.getConnection();
+            PreparedStatement ps = con.prepareStatement(sql)){
+            ps.setString(1, status);
+            ps.setInt(2, id);
+            ps.executeUpdate();
+        }
     }
 
     public void delete(int id) throws Exception {
