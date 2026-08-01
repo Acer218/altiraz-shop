@@ -213,6 +213,18 @@ main{ max-width:900px; margin:0 auto; padding:0 16px 70px; }
   text-decoration:none;
 }
 .whatsapp-btn:hover{ background:#255f3e; }
+.facebook-btn{
+  display:inline-block;
+  background:#1877f2;
+  color:#fbf1e6;
+  font-family:'Cairo', sans-serif;
+  font-size:14.5px;
+  font-weight:600;
+  padding:9px 22px;
+  border-radius:20px;
+  text-decoration:none;
+}
+.facebook-btn:hover{ background:#1360c4; }
 
 /* category preview sections on home */
 .reveal{
@@ -639,6 +651,12 @@ footer{
   flex-direction:column;
   align-items:center;
   gap:8px;
+}
+.footer-social-row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:center;
 }
 .footer-contact a{
   display:inline-block;
