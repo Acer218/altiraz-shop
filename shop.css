@@ -651,6 +651,31 @@ footer{
   text-decoration:none;
 }
 .footer-contact a:hover{ background:var(--rust-dark); }
+.footer-link-btn{
+  display:block;
+  margin:16px auto 0;
+  background:none;
+  border:none;
+  color:var(--muted);
+  font-size:13px;
+  text-decoration:underline;
+  cursor:pointer;
+  font-family:'Cairo', sans-serif;
+}
+.footer-link-btn:hover{ color:var(--ink); }
+
+.about-section{
+  max-width:640px;
+  margin:0 auto 20px;
+  padding:0 8px;
+  text-align:center;
+}
+.about-section p{
+  color:var(--coffee);
+  font-size:15px;
+  line-height:1.9;
+  margin:0 0 12px;
+}
 
 /* cart */
 .cart-badge{
@@ -976,6 +1001,70 @@ footer{
   font-size:15px;
   font-weight:700;
 }
+
+.pm-extra{
+  border-top:1px dashed var(--thread);
+  margin-top:24px;
+  padding-top:20px;
+  text-align:right;
+}
+.pm-extra-title{ font-size:17px; margin:0 0 12px; }
+.pm-rating-summary{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:14px;
+}
+.pm-rating-stars{ color:var(--camel-dark); font-size:16px; letter-spacing:1px; }
+.pm-rating-count{ color:var(--muted); font-size:12.5px; }
+.pm-reviews-loading, .pm-reviews-empty{ color:var(--muted); font-size:13.5px; margin:0 0 14px; }
+.pm-reviews-list{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  margin-bottom:18px;
+  max-height:220px;
+  overflow-y:auto;
+}
+.pm-review-item{
+  background:var(--parchment);
+  border-radius:8px;
+  padding:10px 12px;
+}
+.pm-review-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:4px;
+}
+.pm-review-name{ font-weight:700; font-size:13.5px; }
+.pm-review-stars{ color:var(--camel-dark); font-size:13px; letter-spacing:1px; }
+.pm-review-comment{ font-size:13px; color:var(--coffee); margin:0; line-height:1.6; }
+.pm-review-form{
+  background:var(--card);
+  border:1px solid rgba(42,29,20,0.1);
+  border-radius:10px;
+  padding:16px;
+}
+.pm-star-picker{
+  display:flex;
+  gap:4px;
+  margin-bottom:14px;
+  justify-content:flex-end;
+}
+.pm-star-btn{
+  background:none;
+  border:none;
+  font-size:24px;
+  color:rgba(42,29,20,0.2);
+  cursor:pointer;
+  padding:0;
+  line-height:1;
+}
+.pm-star-btn.active{ color:var(--camel-dark); }
+.pm-related-block{ margin-top:26px; }
+.pm-related-scroll{ padding-bottom:6px; }
+.pm-related-scroll .tag{ min-width:150px; }
 
 @media (min-width:700px){
   .product-modal-overlay{ align-items:center; padding:30px; }
