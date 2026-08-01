@@ -42,6 +42,7 @@ const bannerEl = document.getElementById("adminBanner");
 const brandEl = document.getElementById("brandLogo");
 const secretDot = document.getElementById("secretDot");
 const headerCartBtn = document.getElementById("headerCartBtn");
+const aboutLinkBtn = document.getElementById("aboutLink");
 const globalSearchInput = document.getElementById("globalSearch");
 const globalSearchBtn = document.getElementById("globalSearchBtn");
 
@@ -156,6 +157,7 @@ function refreshCartBadge(){
 }
 
 function goHome(){ view="home"; currentCategory=null; editingId=null; pendingImages=[]; setActiveNav(); render(); scrollTop(); }
+function goAbout(){ view="about"; setActiveNav(); render(); scrollTop(); }
 function goCategory(key){ view="category"; currentCategory=key; editingId=null; pendingImages=[]; categorySearchTerm=""; setActiveNav(); render(); scrollTop(); }
 function goCart(){ view="cart"; checkoutOpen=false; orderConfirmed=false; setActiveNav(); render(); scrollTop(); }
 function goSearchGlobal(term){
@@ -175,6 +177,7 @@ async function goOrders(){
   scrollTop();
 }
 function scrollTop(){ window.scrollTo({top:0, behavior:"smooth"}); }
+function goAbout(){ view="about"; setActiveNav(); render(); scrollTop(); }
 
 /* render dispatch */
 function render(){
@@ -188,6 +191,7 @@ function render(){
   else if(view === "cart") renderCart();
   else if(view === "orders") renderOrders();
   else if(view === "search") renderSearchView();
+  else if(view === "about") renderAbout();
 }
 
 function renderBanner(){
@@ -861,6 +865,20 @@ async function handleConfirmOrder(rows, total){
 }
 
 /* orders (admin) */
+function renderAbout(){
+  mainEl.innerHTML = `
+    <div class="cat-top"><h2>من نحن</h2></div>
+    <div class="about-section">
+      <p>الطِّراز متجر ليبي يقدّم أزياء تقليدية أصيلة بلمسة عصرية أنيقة. نحرص على اختيار كل قطعة بعناية لتجمع بين الجودة والتراث والفخامة، لنقدّم لكم تجربة تسوّق تعكس هويتنا الليبية الأصيلة.</p>
+    </div>
+    <div class="cat-top" style="padding-top:36px;"><h2>سياسة الاستبدال والاسترجاع</h2></div>
+    <div class="about-section">
+      <p>يمكنكم استبدال أو إرجاع القطعة خلال 3 أيام من تاريخ الاستلام، بشرط أن تكون بحالتها الأصلية دون استخدام، ومع الاحتفاظ بالبطاقة والتغليف الأصلي.</p>
+      <p>للاستبدال أو الاسترجاع، يُرجى التواصل معنا مباشرة عبر الهاتف أو واتساب مع ذكر رقم الطلب.</p>
+    </div>
+  `;
+}
+
 const ORDER_STATUS_LABELS = { pending: "قيد التنفيذ", delivered: "تم التسليم", cancelled: "ملغي" };
 
 function renderOrders(){
@@ -927,6 +945,18 @@ function renderOrders(){
 }
 
 /* product detail modal (fullscreen) */
+async function fetchProductReviews(productId){
+  try{
+    const res = await fetch(`${API_BASE}/reviews?productId=${productId}`);
+    const data = await res.json();
+    return (res.ok && Array.isArray(data)) ? data : [];
+  }catch(e){ return []; }
+}
+function starsDisplay(rating){
+  const full = Math.round(rating);
+  return "★".repeat(full) + "☆".repeat(5 - full);
+}
+
 function openProductModal(id){
   const p = products.find(p => p.id === id);
   if(!p) return;
@@ -938,6 +968,10 @@ function openProductModal(id){
   let qty = 1;
   let orderNowStep = "product"; // product | form | confirmed
   let quickOrderId = null;
+  let reviews = [];
+  let reviewsLoaded = false;
+  let newRating = 5;
+  const related = products.filter(x => x.category === p.category && x.id !== p.id).slice(0, 6);
 
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay product-modal-overlay";
@@ -1023,6 +1057,56 @@ function openProductModal(id){
               </div>
             ` : ``}
           </div>
+        </div>
+        <div class="pm-extra">
+          <div class="pm-reviews-block">
+            <h3 class="pm-extra-title">التقييمات</h3>
+            ${!reviewsLoaded ? `
+              <p class="pm-reviews-loading">جاري تحميل التقييمات...</p>
+            ` : `
+              ${reviews.length > 0 ? `
+                <div class="pm-rating-summary">
+                  <span class="pm-rating-stars">${starsDisplay(reviews.reduce((s,r)=>s+r.rating,0)/reviews.length)}</span>
+                  <span class="mono">${(reviews.reduce((s,r)=>s+r.rating,0)/reviews.length).toFixed(1)}</span>
+                  <span class="pm-rating-count">(${reviews.length} تقييم)</span>
+                </div>
+                <div class="pm-reviews-list">
+                  ${reviews.map(r => `
+                    <div class="pm-review-item">
+                      <div class="pm-review-head">
+                        <span class="pm-review-name">${escapeHtml(r.name)}</span>
+                        <span class="pm-review-stars">${starsDisplay(r.rating)}</span>
+                      </div>
+                      ${r.comment ? `<p class="pm-review-comment">${escapeHtml(r.comment)}</p>` : ``}
+                    </div>
+                  `).join("")}
+                </div>
+              ` : `<p class="pm-reviews-empty">لا توجد تقييمات بعد. كن أول من يقيّم هذا المنتج.</p>`}
+            `}
+            <div class="pm-review-form">
+              <div class="field">
+                <label for="rvName">الاسم</label>
+                <input type="text" id="rvName" placeholder="اسمك">
+              </div>
+              <div class="pm-star-picker" id="rvStarPicker">
+                ${[1,2,3,4,5].map(n => `<button type="button" class="pm-star-btn ${n <= newRating ? "active" : ""}" data-star="${n}">★</button>`).join("")}
+              </div>
+              <div class="field">
+                <label for="rvComment">تعليقك (اختياري)</label>
+                <textarea id="rvComment" placeholder="رأيك في المنتج..."></textarea>
+              </div>
+              <button class="ghost-btn" id="rvSubmitBtn">إرسال التقييم</button>
+              <p class="form-error" id="rvMsg"></p>
+            </div>
+          </div>
+          ${related.length > 0 ? `
+            <div class="pm-related-block">
+              <h3 class="pm-extra-title">قد يعجبك أيضًا</h3>
+              <div class="featured-scroll pm-related-scroll">
+                ${related.map(buildCustomerCardHtml).join("")}
+              </div>
+            </div>
+          ` : ``}
         </div>
       </div>
     `;
@@ -1120,8 +1204,69 @@ function openProductModal(id){
     }
     const qCloseBtn = overlay.querySelector("#qCloseBtn");
     if(qCloseBtn) qCloseBtn.addEventListener("click", closeProductModal);
+
+    overlay.querySelectorAll(".pm-star-btn").forEach(btn => {
+      btn.addEventListener("click", () => { newRating = Number(btn.dataset.star); draw(); });
+    });
+    const rvSubmitBtn = overlay.querySelector("#rvSubmitBtn");
+    if(rvSubmitBtn){
+      rvSubmitBtn.addEventListener("click", async () => {
+        const name = overlay.querySelector("#rvName").value.trim();
+        const comment = overlay.querySelector("#rvComment").value.trim();
+        const msg = overlay.querySelector("#rvMsg");
+        if(!name){
+          msg.className = "form-error";
+          msg.textContent = "أدخل اسمك قبل إرسال التقييم.";
+          return;
+        }
+        rvSubmitBtn.disabled = true;
+        try{
+          const res = await fetch(`${API_BASE}/reviews`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ productId: p.id, name, rating: newRating, comment })
+          });
+          if(!res.ok) throw new Error("review failed");
+          reviews = await fetchProductReviews(p.id);
+          newRating = 5;
+          draw();
+        }catch(e){
+          rvSubmitBtn.disabled = false;
+          msg.className = "form-error";
+          msg.textContent = "تعذر إرسال التقييم. حاول مرة أخرى.";
+        }
+      });
+    }
+    const relatedScroll = overlay.querySelector(".pm-related-scroll");
+    if(relatedScroll){
+      relatedScroll.querySelectorAll(".tag").forEach(tagEl => {
+        tagEl.addEventListener("click", (e) => {
+          if(e.target.closest("button")) return;
+          const newId = Number(tagEl.dataset.id);
+          closeProductModal();
+          openProductModal(newId);
+        });
+      });
+      relatedScroll.querySelectorAll(".add-cart-btn:not([disabled])").forEach(btn => {
+        btn.addEventListener("click", () => {
+          addToCart(Number(btn.dataset.id), null, 1);
+          const original = btn.textContent;
+          btn.textContent = "أُضيفت ✓";
+          btn.disabled = true;
+          setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1200);
+        });
+      });
+    }
   }
   draw();
+
+  if(!reviewsLoaded){
+    fetchProductReviews(p.id).then(data => {
+      reviews = data;
+      reviewsLoaded = true;
+      draw();
+    });
+  }
 
   function keyHandler(e){
     if(e.key === "Escape") closeProductModal();
@@ -1251,6 +1396,7 @@ function registerCartTap(){
 brandEl.addEventListener("click", registerLogoTap);
 secretDot.addEventListener("click", () => { if(!adminUnlocked && !gateOpen) openGate(); });
 headerCartBtn.addEventListener("click", () => { goCart(); registerCartTap(); });
+aboutLinkBtn.addEventListener("click", goAbout);
 globalSearchBtn.addEventListener("click", () => goSearchGlobal(globalSearchInput.value));
 globalSearchInput.addEventListener("keydown", e => {
   if(e.key === "Enter") goSearchGlobal(globalSearchInput.value);
