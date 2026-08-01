@@ -8,6 +8,7 @@ public class Main {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/api/products", new ProductsHandler());
         server.createContext("/api/orders", new OrdersHandler());
+        server.createContext("/api/reviews", new ReviewsHandler());
         server.setExecutor(null);
         server.start();
         System.out.println("Server running on port " + port);
