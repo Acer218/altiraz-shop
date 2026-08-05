@@ -8,5 +8,8 @@ public class Order {
     public double total;
     public String date;
     public String status;
+    public String orderType;
+    public double deliveryFee;
+    public double inspectionFee;
     public List<OrderItem> items;
 }
