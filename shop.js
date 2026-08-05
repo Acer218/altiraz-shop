@@ -35,6 +35,11 @@ let lastOrderId = null;
 let logoTaps = [];
 let categorySearchTerm = "";
 let globalSearchTerm = "";
+let settings = { deliveryFee: 15, inspectionFee: 20 };
+let inspectionSelection = [];
+let inspectionCheckoutOpen = false;
+let inspectionConfirmed = false;
+let lastInspectionOrderId = null;
 
 const mainEl = document.getElementById("main");
 const navEl = document.getElementById("navButtons");
@@ -68,7 +73,10 @@ function saveCustomerInfo(name, phone, location){
 async function placeQuickOrder(p, size, qty, info){
   const payload = {
     name: info.name, phone: info.phone, location: info.location,
-    total: p.price * qty,
+    total: (p.price * qty) + settings.deliveryFee,
+    orderType: "purchase",
+    deliveryFee: settings.deliveryFee,
+    inspectionFee: 0,
     items: [{ productId: p.id, name: p.name, price: p.price, qty, size }]
   };
   const res = await fetch(`${API_BASE}/orders`, {
@@ -117,6 +125,24 @@ async function loadOrders(){
     orders = [];
   }
 }
+async function fetchSettings(){
+  try{
+    const res = await fetch(`${API_BASE}/settings`);
+    const data = await res.json();
+    if(res.ok && data){
+      settings = { deliveryFee: Number(data.deliveryFee) || 15, inspectionFee: Number(data.inspectionFee) || 20 };
+    }
+  }catch(e){ /* keep defaults if this fails */ }
+}
+async function updateSettings(deliveryFee, inspectionFee){
+  const res = await fetch(`${API_BASE}/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered },
+    body: JSON.stringify({ deliveryFee, inspectionFee })
+  });
+  if(!res.ok) throw new Error("settings update failed");
+  await fetchSettings();
+}
 
 /* nav build */
 function buildNav(){
@@ -124,8 +150,12 @@ function buildNav(){
   for(const c of CATEGORIES){
     html += `<button data-view="category" data-cat="${c.key}">${c.label}</button>`;
   }
+  html += `<button data-view="inspection">المتجر لعندك</button>`;
   if(adminUnlocked || staffUnlocked){
     html += `<button data-view="orders">الطلبات</button>`;
+  }
+  if(adminUnlocked){
+    html += `<button data-view="settings">الإعدادات</button>`;
   }
   navEl.innerHTML = html;
   navEl.querySelectorAll("button").forEach(btn => {
@@ -133,6 +163,8 @@ function buildNav(){
       if(btn.dataset.view === "home") goHome();
       else if(btn.dataset.view === "category") goCategory(btn.dataset.cat);
       else if(btn.dataset.view === "orders") goOrders();
+      else if(btn.dataset.view === "inspection") goInspection();
+      else if(btn.dataset.view === "settings") goSettings();
     });
   });
   refreshCartBadge();
@@ -160,6 +192,15 @@ function goHome(){ view="home"; currentCategory=null; editingId=null; pendingIma
 function goAbout(){ view="about"; setActiveNav(); render(); scrollTop(); }
 function goCategory(key){ view="category"; currentCategory=key; editingId=null; pendingImages=[]; categorySearchTerm=""; setActiveNav(); render(); scrollTop(); }
 function goCart(){ view="cart"; checkoutOpen=false; orderConfirmed=false; setActiveNav(); render(); scrollTop(); }
+function goInspection(){
+  view = "inspection";
+  inspectionCheckoutOpen = false;
+  inspectionConfirmed = false;
+  setActiveNav();
+  render();
+  scrollTop();
+}
+function goSettings(){ view = "settings"; setActiveNav(); render(); scrollTop(); }
 function goSearchGlobal(term){
   view = "search";
   currentCategory = null;
@@ -177,7 +218,6 @@ async function goOrders(){
   scrollTop();
 }
 function scrollTop(){ window.scrollTo({top:0, behavior:"smooth"}); }
-function goAbout(){ view="about"; setActiveNav(); render(); scrollTop(); }
 
 /* render dispatch */
 function render(){
@@ -185,6 +225,7 @@ function render(){
     mainEl.innerHTML = '<div class="loading">جاري التحميل…</div>';
     return;
   }
+  if(view !== "inspection") removeInspectionBar();
   renderBanner();
   if(view === "home") renderHome();
   else if(view === "category") renderCategory(currentCategory);
@@ -192,6 +233,8 @@ function render(){
   else if(view === "orders") renderOrders();
   else if(view === "search") renderSearchView();
   else if(view === "about") renderAbout();
+  else if(view === "inspection") renderInspection();
+  else if(view === "settings") renderSettings();
 }
 
 function renderBanner(){
@@ -739,7 +782,8 @@ function renderCart(){
     const p = products.find(p => p.id === i.id);
     return { p, qty: i.qty, size: i.size || null };
   });
-  const total = rows.reduce((sum, r) => sum + r.p.price * r.qty, 0);
+  const subtotal = rows.reduce((sum, r) => sum + r.p.price * r.qty, 0);
+  const total = subtotal + settings.deliveryFee;
 
   let html = `<div class="cat-top"><h2>السلة</h2></div>`;
 
@@ -771,7 +815,13 @@ function renderCart(){
   }
   html += '</div>';
 
-  html += `<div class="cart-total mono">الإجمالي: ${total.toFixed(2)} د.ل</div>`;
+  html += `
+    <div class="cart-summary">
+      <div class="cart-summary-row"><span>المجموع الفرعي</span><span class="mono">${subtotal.toFixed(2)} د.ل</span></div>
+      <div class="cart-summary-row"><span>رسوم التوصيل</span><span class="mono">${settings.deliveryFee.toFixed(2)} د.ل</span></div>
+      <div class="cart-summary-row cart-summary-total"><span>الإجمالي</span><span class="mono">${total.toFixed(2)} د.ل</span></div>
+    </div>
+  `;
 
   if(!checkoutOpen){
     html += `<button class="primary-btn" id="checkoutBtn">إتمام الطلب</button>`;
@@ -836,6 +886,9 @@ async function handleConfirmOrder(rows, total){
   const payload = {
     name, phone, location,
     total,
+    orderType: "purchase",
+    deliveryFee: settings.deliveryFee,
+    inspectionFee: 0,
     items: rows.map(r => ({ productId: r.p.id, name: r.p.name, price: r.p.price, qty: r.qty, size: r.size }))
   };
   const confirmBtn = document.getElementById("confirmOrderBtn");
@@ -879,6 +932,209 @@ function renderAbout(){
   `;
 }
 
+function renderInspection(){
+  if(inspectionConfirmed){
+    mainEl.innerHTML = `
+      <div class="empty" style="padding-top:60px;">
+        <h3>تم استلام طلب الفحص بنجاح</h3>
+        ${lastInspectionOrderId ? `<p class="order-ref mono">رقم الطلب: #${lastInspectionOrderId}</p>` : ``}
+        <p>سنتواصل معك قريبًا لتحديد موعد إحضار القطع لمنزلك.</p>
+        <button class="preview-btn" id="inspBackBtn" style="margin-top:16px;">العودة للرئيسية</button>
+      </div>
+    `;
+    document.getElementById("inspBackBtn").addEventListener("click", () => {
+      inspectionSelection = [];
+      goHome();
+    });
+    return;
+  }
+
+  const eligible = products.filter(p => p.inStock !== false);
+  let html = `
+    <div class="cat-top">
+      <h2>المتجر لعندك</h2>
+      <p>اختر القطع التي ترغب بفحصها في منزلك قبل الشراء، مقابل رسوم فحص قدرها ${settings.inspectionFee.toFixed(2)} د.ل فقط.</p>
+    </div>
+  `;
+
+  if(eligible.length === 0){
+    html += `<div class="empty"><h3>لا توجد قطع متاحة حاليًا.</h3></div>`;
+  } else {
+    html += '<div class="grid insp-grid">';
+    for(const p of eligible){
+      const selected = inspectionSelection.includes(p.id);
+      html += `
+        <div class="tag insp-tag ${selected ? "insp-selected" : ""}" data-id="${p.id}">
+          <img class="tag-img" src="${p.images[0]}" alt="${escapeHtml(p.name)}">
+          <span class="insp-check">${selected ? "✓" : ""}</span>
+          <h3 class="tag-name">${escapeHtml(p.name)}</h3>
+          <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
+        </div>
+      `;
+    }
+    html += '</div>';
+  }
+
+  if(inspectionCheckoutOpen){
+    html += `
+      <div class="panel" style="margin-top:24px;">
+        <h3>بيانات التوصيل</h3>
+        <div class="field">
+          <label for="iName">الاسم</label>
+          <input type="text" id="iName" placeholder="اسمك الكامل">
+        </div>
+        <div class="field">
+          <label for="iPhone">رقم الهاتف</label>
+          <input type="tel" id="iPhone" inputmode="numeric" maxlength="10" placeholder="09xxxxxxxx">
+        </div>
+        <div class="field">
+          <label for="iLocation">الموقع</label>
+          <input type="text" id="iLocation" placeholder="المدينة، الحي، أقرب نقطة دالة">
+        </div>
+        <button class="primary-btn" id="iConfirmBtn">تأكيد طلب الفحص</button>
+        <button class="ghost-btn" id="iCancelBtn">رجوع</button>
+        <p class="form-error" id="iMsg"></p>
+      </div>
+    `;
+  }
+
+  mainEl.innerHTML = html;
+
+  mainEl.querySelectorAll(".insp-tag").forEach(tagEl => {
+    tagEl.addEventListener("click", () => {
+      const id = Number(tagEl.dataset.id);
+      const idx = inspectionSelection.indexOf(id);
+      if(idx === -1) inspectionSelection.push(id);
+      else inspectionSelection.splice(idx, 1);
+      renderInspection();
+    });
+  });
+
+  if(!inspectionCheckoutOpen){
+    renderInspectionBar();
+  } else {
+    removeInspectionBar();
+    const iCancelBtn = document.getElementById("iCancelBtn");
+    if(iCancelBtn) iCancelBtn.addEventListener("click", () => { inspectionCheckoutOpen = false; renderInspection(); });
+    const iPhoneInput = document.getElementById("iPhone");
+    if(iPhoneInput){
+      iPhoneInput.addEventListener("input", () => {
+        iPhoneInput.value = iPhoneInput.value.replace(/[^0-9]/g, "").slice(0, 10);
+      });
+    }
+    const iConfirmBtn = document.getElementById("iConfirmBtn");
+    if(iConfirmBtn) iConfirmBtn.addEventListener("click", handleConfirmInspection);
+  }
+}
+
+function renderInspectionBar(){
+  removeInspectionBar();
+  const bar = document.createElement("div");
+  bar.id = "inspectionBar";
+  bar.className = "insp-sticky-bar";
+  bar.innerHTML = `
+    <span class="mono">تم اختيار ${inspectionSelection.length} قطعة — رسوم الفحص: ${settings.inspectionFee.toFixed(2)} د.ل</span>
+    <button class="primary-btn" id="inspOrderBtn" ${inspectionSelection.length === 0 ? "disabled" : ""}>طلب الفحص</button>
+  `;
+  document.body.appendChild(bar);
+  const btn = document.getElementById("inspOrderBtn");
+  if(btn) btn.addEventListener("click", () => { inspectionCheckoutOpen = true; renderInspection(); });
+}
+function removeInspectionBar(){
+  const el = document.getElementById("inspectionBar");
+  if(el) el.remove();
+}
+
+async function handleConfirmInspection(){
+  const name = document.getElementById("iName").value.trim();
+  const phone = document.getElementById("iPhone").value.trim();
+  const location = document.getElementById("iLocation").value.trim();
+  const msg = document.getElementById("iMsg");
+
+  if(!name || !phone || !location){
+    msg.className = "form-error";
+    msg.textContent = "املأ الاسم ورقم الهاتف والموقع لإتمام الطلب.";
+    return;
+  }
+  if(!/^[0-9]{10}$/.test(phone)){
+    msg.className = "form-error";
+    msg.textContent = "رقم الهاتف يجب أن يتكون من 10 أرقام بالضبط.";
+    return;
+  }
+
+  const selectedProducts = inspectionSelection
+    .map(id => products.find(p => p.id === id))
+    .filter(Boolean);
+
+  const payload = {
+    name, phone, location,
+    total: settings.inspectionFee,
+    orderType: "inspection",
+    deliveryFee: 0,
+    inspectionFee: settings.inspectionFee,
+    items: selectedProducts.map(p => ({ productId: p.id, name: p.name, price: p.price, qty: 1, size: null }))
+  };
+
+  const btn = document.getElementById("iConfirmBtn");
+  btn.disabled = true;
+  try{
+    const res = await fetch(`${API_BASE}/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok) throw new Error("inspection order failed");
+    const created = await res.json();
+    lastInspectionOrderId = created && created.id ? created.id : null;
+    saveCustomerInfo(name, phone, location);
+    inspectionCheckoutOpen = false;
+    inspectionConfirmed = true;
+    removeInspectionBar();
+    renderInspection();
+  }catch(e){
+    btn.disabled = false;
+    msg.className = "form-error";
+    msg.textContent = "تعذر إرسال الطلب. تحقق من الاتصال وحاول مرة أخرى.";
+  }
+}
+
+function renderSettings(){
+  mainEl.innerHTML = `
+    <div class="cat-top"><h2>الإعدادات</h2></div>
+    <div class="panel" style="max-width:420px; margin:0 auto;">
+      <h3>الرسوم</h3>
+      <div class="field">
+        <label for="sDelivery">رسوم التوصيل (د.ل)</label>
+        <input type="number" id="sDelivery" min="0" step="0.01" value="${settings.deliveryFee}">
+      </div>
+      <div class="field">
+        <label for="sInspection">رسوم الفحص المنزلي (د.ل)</label>
+        <input type="number" id="sInspection" min="0" step="0.01" value="${settings.inspectionFee}">
+      </div>
+      <button class="primary-btn" id="sSaveBtn">حفظ التغييرات</button>
+      <p class="form-error" id="sMsg"></p>
+    </div>
+  `;
+  document.getElementById("sSaveBtn").addEventListener("click", async () => {
+    const deliveryFee = Number(document.getElementById("sDelivery").value);
+    const inspectionFee = Number(document.getElementById("sInspection").value);
+    const msg = document.getElementById("sMsg");
+    if(isNaN(deliveryFee) || deliveryFee < 0 || isNaN(inspectionFee) || inspectionFee < 0){
+      msg.className = "form-error";
+      msg.textContent = "أدخل أرقامًا صحيحة للرسوم.";
+      return;
+    }
+    try{
+      await updateSettings(deliveryFee, inspectionFee);
+      msg.className = "form-ok";
+      msg.textContent = "تم حفظ التغييرات.";
+    }catch(e){
+      msg.className = "form-error";
+      msg.textContent = "تعذر الحفظ. تحقق من الاتصال.";
+    }
+  });
+}
+
 const ORDER_STATUS_LABELS = { pending: "قيد التنفيذ", delivered: "تم التسليم", cancelled: "ملغي" };
 
 function renderOrders(){
@@ -890,17 +1146,23 @@ function renderOrders(){
     for(const o of [...orders].reverse()){
       const d = new Date(o.date);
       const status = o.status || "pending";
+      const isInspection = o.orderType === "inspection";
       html += `
         <div class="order-card status-${status}">
           <div class="order-head">
-            <span class="order-name">${escapeHtml(o.name)} <span class="order-id mono">#${o.id}</span></span>
+            <span class="order-name">
+              ${isInspection ? `<span class="order-type-badge">فحص منزلي</span>` : ``}
+              ${escapeHtml(o.name)} <span class="order-id mono">#${o.id}</span>
+            </span>
             <button class="tag-del" data-id="${o.id}">حذف</button>
           </div>
           <div class="order-meta mono">${escapeHtml(o.phone)}</div>
           <div class="order-meta">${escapeHtml(o.location)}</div>
           <div class="order-items">
-            ${o.items.map(i => `<div>${escapeHtml(i.name)}${i.size ? ` (${escapeHtml(i.size)})` : ``} &times; ${i.qty} — ${i.price.toFixed(2)} د.ل</div>`).join("")}
+            ${o.items.map(i => `<div>${escapeHtml(i.name)}${i.size ? ` (${escapeHtml(i.size)})` : ``} &times; ${i.qty}${isInspection ? `` : ` — ${i.price.toFixed(2)} د.ل`}</div>`).join("")}
           </div>
+          ${!isInspection && o.deliveryFee ? `<div class="order-meta">رسوم التوصيل: ${o.deliveryFee.toFixed(2)} د.ل</div>` : ``}
+          ${isInspection ? `<div class="order-meta">رسوم الفحص: ${o.inspectionFee.toFixed(2)} د.ل</div>` : ``}
           <div class="order-total mono">الإجمالي: ${o.total.toFixed(2)} د.ل</div>
           <div class="order-status-row">
             <span class="order-status-badge status-badge-${status}">${ORDER_STATUS_LABELS[status] || status}</span>
@@ -960,6 +1222,11 @@ function starsDisplay(rating){
 function openProductModal(id){
   const p = products.find(p => p.id === id);
   if(!p) return;
+  try{
+    const url = new URL(window.location.href);
+    url.searchParams.set("product", id);
+    history.pushState({}, "", url);
+  }catch(e){ /* non-fatal, sharing just won't include the product link */ }
   let galleryIndex = 0;
   const sizes = p.sizes || [];
   const soldOut = p.inStock === false;
@@ -1031,6 +1298,7 @@ function openProductModal(id){
             ${(!soldOut && orderNowStep === "form") ? `
               <div class="panel pm-order-form">
                 <h3>بيانات التوصيل</h3>
+                <p class="pm-order-total-note mono">سعر القطعة: ${(p.price * qty).toFixed(2)} د.ل + رسوم توصيل ${settings.deliveryFee.toFixed(2)} د.ل = ${((p.price * qty) + settings.deliveryFee).toFixed(2)} د.ل</p>
                 <div class="field">
                   <label for="qName">الاسم</label>
                   <input type="text" id="qName" placeholder="اسمك الكامل">
@@ -1284,6 +1552,11 @@ function closeProductModal(){
     if(el._keyHandler) document.removeEventListener("keydown", el._keyHandler);
     el.remove();
   }
+  try{
+    const url = new URL(window.location.href);
+    url.searchParams.delete("product");
+    history.pushState({}, "", url);
+  }catch(e){ /* non-fatal */ }
 }
 
 /* hidden admin access */
@@ -1428,5 +1701,15 @@ window.addEventListener("scroll", () => {
   loadCart();
   buildNav();
   await loadProducts();
+  await fetchSettings();
   render();
+
+  const params = new URLSearchParams(window.location.search);
+  const productParam = params.get("product");
+  if(productParam){
+    const targetId = Number(productParam);
+    if(products.some(p => p.id === targetId)){
+      openProductModal(targetId);
+    }
+  }
 })();
