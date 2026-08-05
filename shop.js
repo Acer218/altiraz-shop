@@ -962,13 +962,22 @@ function renderInspection(){
   } else {
     html += '<div class="grid insp-grid">';
     for(const p of eligible){
-      const selected = inspectionSelection.includes(p.id);
+      const entry = inspectionSelection.find(s => s.id === p.id);
+      const selected = !!entry;
+      const sizes = p.sizes || [];
       html += `
         <div class="tag insp-tag ${selected ? "insp-selected" : ""}" data-id="${p.id}">
           <img class="tag-img" src="${p.images[0]}" alt="${escapeHtml(p.name)}">
           <span class="insp-check">${selected ? "✓" : ""}</span>
           <h3 class="tag-name">${escapeHtml(p.name)}</h3>
           <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
+          ${(selected && sizes.length > 0) ? `
+            <div class="insp-size-wrap">
+              <select class="insp-size-select" data-id="${p.id}">
+                ${sizes.map(s => `<option value="${escapeHtml(s)}" ${entry.size === s ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}
+              </select>
+            </div>
+          ` : ``}
         </div>
       `;
     }
@@ -1001,12 +1010,26 @@ function renderInspection(){
   mainEl.innerHTML = html;
 
   mainEl.querySelectorAll(".insp-tag").forEach(tagEl => {
-    tagEl.addEventListener("click", () => {
+    tagEl.addEventListener("click", (e) => {
+      if(e.target.closest("select")) return;
       const id = Number(tagEl.dataset.id);
-      const idx = inspectionSelection.indexOf(id);
-      if(idx === -1) inspectionSelection.push(id);
-      else inspectionSelection.splice(idx, 1);
+      const idx = inspectionSelection.findIndex(s => s.id === id);
+      if(idx === -1){
+        const p = products.find(p => p.id === id);
+        const sizes = p && p.sizes ? p.sizes : [];
+        inspectionSelection.push({ id, size: sizes.length > 0 ? sizes[0] : null });
+      } else {
+        inspectionSelection.splice(idx, 1);
+      }
       renderInspection();
+    });
+  });
+  mainEl.querySelectorAll(".insp-size-select").forEach(sel => {
+    sel.addEventListener("click", e => e.stopPropagation());
+    sel.addEventListener("change", () => {
+      const id = Number(sel.dataset.id);
+      const entry = inspectionSelection.find(s => s.id === id);
+      if(entry) entry.size = sel.value;
     });
   });
 
@@ -1063,7 +1086,10 @@ async function handleConfirmInspection(){
   }
 
   const selectedProducts = inspectionSelection
-    .map(id => products.find(p => p.id === id))
+    .map(entry => {
+      const p = products.find(p => p.id === entry.id);
+      return p ? { product: p, size: entry.size } : null;
+    })
     .filter(Boolean);
 
   const payload = {
@@ -1072,7 +1098,7 @@ async function handleConfirmInspection(){
     orderType: "inspection",
     deliveryFee: 0,
     inspectionFee: settings.inspectionFee,
-    items: selectedProducts.map(p => ({ productId: p.id, name: p.name, price: p.price, qty: 1, size: null }))
+    items: selectedProducts.map(s => ({ productId: s.product.id, name: s.product.name, price: s.product.price, qty: 1, size: s.size }))
   };
 
   const btn = document.getElementById("iConfirmBtn");
