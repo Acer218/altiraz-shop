@@ -791,6 +791,17 @@ footer{
   justify-content:center;
   z-index:1;
 }
+.insp-size-wrap{ margin-top:8px; }
+.insp-size-select{
+  width:100%;
+  padding:7px 9px;
+  border:1px solid rgba(42,29,20,0.2);
+  border-radius:6px;
+  font-size:13px;
+  font-family:'Cairo', sans-serif;
+  background:#fff;
+  cursor:pointer;
+}
 .insp-sticky-bar{
   position:fixed;
   bottom:0;
