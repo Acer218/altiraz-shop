@@ -35,7 +35,7 @@ let lastOrderId = null;
 let logoTaps = [];
 let categorySearchTerm = "";
 let globalSearchTerm = "";
-let settings = { deliveryFee: 15, inspectionFee: 20 };
+let settings = { deliveryFee: 15, inspectionFee: 20, maxInspectionItems: 15 };
 let inspectionSelection = [];
 let inspectionCheckoutOpen = false;
 let inspectionConfirmed = false;
@@ -130,15 +130,19 @@ async function fetchSettings(){
     const res = await fetch(`${API_BASE}/settings`);
     const data = await res.json();
     if(res.ok && data){
-      settings = { deliveryFee: Number(data.deliveryFee) || 15, inspectionFee: Number(data.inspectionFee) || 20 };
+      settings = {
+        deliveryFee: Number(data.deliveryFee) || 15,
+        inspectionFee: Number(data.inspectionFee) || 20,
+        maxInspectionItems: Number(data.maxInspectionItems) || 15
+      };
     }
   }catch(e){ /* keep defaults if this fails */ }
 }
-async function updateSettings(deliveryFee, inspectionFee){
+async function updateSettings(deliveryFee, inspectionFee, maxInspectionItems){
   const res = await fetch(`${API_BASE}/settings`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered },
-    body: JSON.stringify({ deliveryFee, inspectionFee })
+    body: JSON.stringify({ deliveryFee, inspectionFee, maxInspectionItems })
   });
   if(!res.ok) throw new Error("settings update failed");
   await fetchSettings();
@@ -950,10 +954,12 @@ function renderInspection(){
   }
 
   const eligible = products.filter(p => p.inStock !== false);
+  const limitReached = inspectionSelection.length >= settings.maxInspectionItems;
   let html = `
     <div class="cat-top">
       <h2>المتجر لعندك</h2>
-      <p>اختر القطع التي ترغب بفحصها في منزلك قبل الشراء، مقابل رسوم فحص قدرها ${settings.inspectionFee.toFixed(2)} د.ل فقط.</p>
+      <p>اختر القطع التي ترغب بفحصها في منزلك قبل الشراء، مقابل رسوم فحص قدرها ${settings.inspectionFee.toFixed(2)} د.ل فقط. (بحد أقصى ${settings.maxInspectionItems} قطعة)</p>
+      ${limitReached ? `<p class="insp-limit-note">لقد وصلت للحد الأقصى (${settings.maxInspectionItems} قطعة). أزل قطعة لإضافة أخرى.</p>` : ``}
     </div>
   `;
 
@@ -965,8 +971,9 @@ function renderInspection(){
       const entry = inspectionSelection.find(s => s.id === p.id);
       const selected = !!entry;
       const sizes = p.sizes || [];
+      const disabled = !selected && limitReached;
       html += `
-        <div class="tag insp-tag ${selected ? "insp-selected" : ""}" data-id="${p.id}">
+        <div class="tag insp-tag ${selected ? "insp-selected" : ""} ${disabled ? "insp-disabled" : ""}" data-id="${p.id}">
           <img class="tag-img" src="${p.images[0]}" alt="${escapeHtml(p.name)}">
           <span class="insp-check">${selected ? "✓" : ""}</span>
           <h3 class="tag-name">${escapeHtml(p.name)}</h3>
@@ -1015,6 +1022,7 @@ function renderInspection(){
       const id = Number(tagEl.dataset.id);
       const idx = inspectionSelection.findIndex(s => s.id === id);
       if(idx === -1){
+        if(inspectionSelection.length >= settings.maxInspectionItems) return;
         const p = products.find(p => p.id === id);
         const sizes = p && p.sizes ? p.sizes : [];
         inspectionSelection.push({ id, size: sizes.length > 0 ? sizes[0] : null });
@@ -1056,7 +1064,7 @@ function renderInspectionBar(){
   bar.id = "inspectionBar";
   bar.className = "insp-sticky-bar";
   bar.innerHTML = `
-    <span class="mono">تم اختيار ${inspectionSelection.length} قطعة — رسوم الفحص: ${settings.inspectionFee.toFixed(2)} د.ل</span>
+    <span class="mono">تم اختيار ${inspectionSelection.length} / ${settings.maxInspectionItems} قطعة — رسوم الفحص: ${settings.inspectionFee.toFixed(2)} د.ل</span>
     <button class="primary-btn" id="inspOrderBtn" ${inspectionSelection.length === 0 ? "disabled" : ""}>طلب الفحص</button>
   `;
   document.body.appendChild(bar);
@@ -1137,6 +1145,10 @@ function renderSettings(){
         <label for="sInspection">رسوم الفحص المنزلي (د.ل)</label>
         <input type="number" id="sInspection" min="0" step="0.01" value="${settings.inspectionFee}">
       </div>
+      <div class="field">
+        <label for="sMaxItems">الحد الأقصى لعدد القطع في "المتجر لعندك"</label>
+        <input type="number" id="sMaxItems" min="1" step="1" value="${settings.maxInspectionItems}">
+      </div>
       <button class="primary-btn" id="sSaveBtn">حفظ التغييرات</button>
       <p class="form-error" id="sMsg"></p>
     </div>
@@ -1144,14 +1156,20 @@ function renderSettings(){
   document.getElementById("sSaveBtn").addEventListener("click", async () => {
     const deliveryFee = Number(document.getElementById("sDelivery").value);
     const inspectionFee = Number(document.getElementById("sInspection").value);
+    const maxInspectionItems = Number(document.getElementById("sMaxItems").value);
     const msg = document.getElementById("sMsg");
     if(isNaN(deliveryFee) || deliveryFee < 0 || isNaN(inspectionFee) || inspectionFee < 0){
       msg.className = "form-error";
       msg.textContent = "أدخل أرقامًا صحيحة للرسوم.";
       return;
     }
+    if(!Number.isInteger(maxInspectionItems) || maxInspectionItems < 1){
+      msg.className = "form-error";
+      msg.textContent = "أدخل عددًا صحيحًا لا يقل عن 1 للحد الأقصى.";
+      return;
+    }
     try{
-      await updateSettings(deliveryFee, inspectionFee);
+      await updateSettings(deliveryFee, inspectionFee, maxInspectionItems);
       msg.className = "form-ok";
       msg.textContent = "تم حفظ التغييرات.";
     }catch(e){
