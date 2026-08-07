@@ -1,5 +1,3 @@
-const ADMIN_PASSWORD = "i HATE MY LIFE218";
-const STAFF_PASSWORD = "orders123";
 const API_BASE = "https://altiraz-backend.onrender.com/api";
 const CART_KEY = "altirazCart";
 const CUSTOMER_INFO_KEY = "altirazCustomerInfo";
@@ -1622,16 +1620,23 @@ function openGate(){
   document.body.appendChild(overlay);
   const input = document.getElementById("gatePass");
   const err = document.getElementById("gateError");
-  function tryUnlock(){
-    if(input.value === ADMIN_PASSWORD){
-      adminUnlocked = true;
-      adminPasswordEntered = input.value;
-      closeGate();
-      buildNav();
-      setActiveNav();
-      render();
-    } else {
-      err.textContent = "كلمة المرور غير صحيحة.";
+  async function tryUnlock(){
+    const candidate = input.value;
+    try{
+      const res = await fetch(`${API_BASE}/auth-check`, { headers: { "X-Admin-Password": candidate } });
+      const data = res.ok ? await res.json() : null;
+      if(data && data.role === "admin"){
+        adminUnlocked = true;
+        adminPasswordEntered = candidate;
+        closeGate();
+        buildNav();
+        setActiveNav();
+        render();
+      } else {
+        err.textContent = "كلمة المرور غير صحيحة.";
+      }
+    }catch(e){
+      err.textContent = "تعذر التحقق. تحقق من الاتصال.";
     }
   }
   document.getElementById("gateSubmit").addEventListener("click", tryUnlock);
@@ -1676,16 +1681,23 @@ function openStaffGate(){
   document.body.appendChild(overlay);
   const input = document.getElementById("staffGatePass");
   const err = document.getElementById("staffGateError");
-  function tryUnlock(){
-    if(input.value === STAFF_PASSWORD){
-      staffUnlocked = true;
-      staffPasswordEntered = input.value;
-      closeStaffGate();
-      buildNav();
-      setActiveNav();
-      goOrders();
-    } else {
-      err.textContent = "كلمة المرور غير صحيحة.";
+  async function tryUnlock(){
+    const candidate = input.value;
+    try{
+      const res = await fetch(`${API_BASE}/auth-check`, { headers: { "X-Admin-Password": candidate } });
+      const data = res.ok ? await res.json() : null;
+      if(data && (data.role === "staff" || data.role === "admin")){
+        staffUnlocked = true;
+        staffPasswordEntered = candidate;
+        closeStaffGate();
+        buildNav();
+        setActiveNav();
+        goOrders();
+      } else {
+        err.textContent = "كلمة المرور غير صحيحة.";
+      }
+    }catch(e){
+      err.textContent = "تعذر التحقق. تحقق من الاتصال.";
     }
   }
   document.getElementById("staffGateSubmit").addEventListener("click", tryUnlock);
