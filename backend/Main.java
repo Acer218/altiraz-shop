@@ -10,6 +10,7 @@ public class Main {
         server.createContext("/api/orders", new OrdersHandler());
         server.createContext("/api/reviews", new ReviewsHandler());
         server.createContext("/api/settings", new SettingsHandler());
+        server.createContext("/api/auth-check", new AuthHandler());
         server.setExecutor(null);
         server.start();
         System.out.println("Server running on port " + port);
