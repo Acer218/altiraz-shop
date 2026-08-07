@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class ProductsHandler implements HttpHandler {
-    private static final String ADMIN_PASSWORD = "i HATE MY LIFE218";
+    private static final String ADMIN_PASSWORD = System.getenv("ADMIN_PASSWORD");
     private final Gson gson = new Gson();
     private final ProductDao dao = new ProductDao();
 
