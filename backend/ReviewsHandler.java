@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class ReviewsHandler implements HttpHandler {
-    private static final String ADMIN_PASSWORD = "i HATE MY LIFE218";
-    private static final String ORDER_TAKER_PASSWORD = "orders123";
+    private static final String ADMIN_PASSWORD = System.getenv("ADMIN_PASSWORD");
+    private static final String ORDER_TAKER_PASSWORD = System.getenv("STAFF_PASSWORD");
     private final Gson gson = new Gson();
     private final ReviewDao dao = new ReviewDao();
 
