@@ -6,7 +6,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 public class SettingsHandler implements HttpHandler {
-    private static final String ADMIN_PASSWORD = "i HATE MY LIFE218";
+    private static final String ADMIN_PASSWORD = System.getenv("ADMIN_PASSWORD");
     private final Gson gson = new Gson();
     private final SettingsDao dao = new SettingsDao();
 
