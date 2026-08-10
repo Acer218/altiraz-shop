@@ -11,6 +11,7 @@ public class Main {
         server.createContext("/api/reviews", new ReviewsHandler());
         server.createContext("/api/settings", new SettingsHandler());
         server.createContext("/api/auth-check", new AuthHandler());
+        server.createContext("/api/discount-codes", new DiscountCodesHandler());
         server.setExecutor(null);
         server.start();
         System.out.println("Server running on port " + port);
