@@ -30,6 +30,7 @@ let gateOpen = false;
 let checkoutOpen = false;
 let orderConfirmed = false;
 let lastOrderId = null;
+let appliedDiscount = null; // { code, percent }
 let logoTaps = [];
 let categorySearchTerm = "";
 let globalSearchTerm = "";
@@ -785,7 +786,8 @@ function renderCart(){
     return { p, qty: i.qty, size: i.size || null };
   });
   const subtotal = rows.reduce((sum, r) => sum + r.p.price * r.qty, 0);
-  const total = subtotal + settings.deliveryFee;
+  const discountAmount = appliedDiscount ? subtotal * (appliedDiscount.percent / 100) : 0;
+  const total = subtotal - discountAmount + settings.deliveryFee;
 
   let html = `<div class="cat-top"><h2>السلة</h2></div>`;
 
@@ -818,8 +820,24 @@ function renderCart(){
   html += '</div>';
 
   html += `
+    <div class="discount-row">
+      ${appliedDiscount ? `
+        <div class="discount-applied">
+          <span class="mono">تم تطبيق الكود "${escapeHtml(appliedDiscount.code)}" (خصم ${appliedDiscount.percent}%)</span>
+          <button class="tag-del" id="removeDiscountBtn">إزالة</button>
+        </div>
+      ` : `
+        <div class="discount-input-row">
+          <input type="text" id="discountCodeInput" placeholder="لديك كود خصم؟" style="text-transform:uppercase;">
+          <button class="ghost-btn" id="applyDiscountBtn">تطبيق</button>
+        </div>
+        <p class="form-error" id="discountMsg"></p>
+      `}
+    </div>
+
     <div class="cart-summary">
       <div class="cart-summary-row"><span>المجموع الفرعي</span><span class="mono">${subtotal.toFixed(2)} د.ل</span></div>
+      ${appliedDiscount ? `<div class="cart-summary-row cart-summary-discount"><span>الخصم (${appliedDiscount.percent}%)</span><span class="mono">-${discountAmount.toFixed(2)} د.ل</span></div>` : ``}
       <div class="cart-summary-row"><span>رسوم التوصيل</span><span class="mono">${settings.deliveryFee.toFixed(2)} د.ل</span></div>
       <div class="cart-summary-row cart-summary-total"><span>الإجمالي</span><span class="mono">${total.toFixed(2)} د.ل</span></div>
     </div>
@@ -856,6 +874,41 @@ function renderCart(){
     btn.addEventListener("click", () => removeFromCart(Number(btn.dataset.id), btn.dataset.size || null));
   });
 
+  const applyDiscountBtn = document.getElementById("applyDiscountBtn");
+  if(applyDiscountBtn){
+    applyDiscountBtn.addEventListener("click", async () => {
+      const codeInput = document.getElementById("discountCodeInput");
+      const msg = document.getElementById("discountMsg");
+      const code = codeInput.value.trim();
+      if(!code){
+        msg.className = "form-error";
+        msg.textContent = "أدخل الكود.";
+        return;
+      }
+      applyDiscountBtn.disabled = true;
+      try{
+        const res = await fetch(`${API_BASE}/discount-codes?code=${encodeURIComponent(code)}`);
+        const data = await res.json();
+        if(data && data.valid){
+          appliedDiscount = { code: data.code, percent: data.percent };
+          renderCart();
+        } else {
+          applyDiscountBtn.disabled = false;
+          msg.className = "form-error";
+          msg.textContent = "هذا الكود غير صالح.";
+        }
+      }catch(e){
+        applyDiscountBtn.disabled = false;
+        msg.className = "form-error";
+        msg.textContent = "تعذر التحقق من الكود. حاول مرة أخرى.";
+      }
+    });
+  }
+  const removeDiscountBtn = document.getElementById("removeDiscountBtn");
+  if(removeDiscountBtn){
+    removeDiscountBtn.addEventListener("click", () => { appliedDiscount = null; renderCart(); });
+  }
+
   if(!checkoutOpen){
     document.getElementById("checkoutBtn").addEventListener("click", () => { checkoutOpen = true; renderCart(); });
   } else {
@@ -885,12 +938,17 @@ async function handleConfirmOrder(rows, total){
     return;
   }
 
+  const subtotal = rows.reduce((sum, r) => sum + r.p.price * r.qty, 0);
+  const discountAmount = appliedDiscount ? subtotal * (appliedDiscount.percent / 100) : 0;
+
   const payload = {
     name, phone, location,
     total,
     orderType: "purchase",
     deliveryFee: settings.deliveryFee,
     inspectionFee: 0,
+    discountCode: appliedDiscount ? appliedDiscount.code : null,
+    discountAmount,
     items: rows.map(r => ({ productId: r.p.id, name: r.p.name, price: r.p.price, qty: r.qty, size: r.size }))
   };
   const confirmBtn = document.getElementById("confirmOrderBtn");
@@ -909,6 +967,7 @@ async function handleConfirmOrder(rows, total){
 
     cart = [];
     saveCart();
+    appliedDiscount = null;
     checkoutOpen = false;
     orderConfirmed = true;
     renderCart();
@@ -1130,7 +1189,7 @@ async function handleConfirmInspection(){
   }
 }
 
-function renderSettings(){
+async function renderSettings(){
   mainEl.innerHTML = `
     <div class="cat-top"><h2>الإعدادات</h2></div>
     <div class="panel" style="max-width:420px; margin:0 auto;">
@@ -1150,7 +1209,23 @@ function renderSettings(){
       <button class="primary-btn" id="sSaveBtn">حفظ التغييرات</button>
       <p class="form-error" id="sMsg"></p>
     </div>
+
+    <div class="panel" style="max-width:420px; margin:24px auto 0;">
+      <h3>أكواد الخصم</h3>
+      <div class="field">
+        <label for="dcCode">الكود</label>
+        <input type="text" id="dcCode" placeholder="مثال: EID10" style="text-transform:uppercase;">
+      </div>
+      <div class="field">
+        <label for="dcPercent">نسبة الخصم (%)</label>
+        <input type="number" id="dcPercent" min="1" max="100" step="1" placeholder="10">
+      </div>
+      <button class="primary-btn" id="dcAddBtn">إضافة الكود</button>
+      <p class="form-error" id="dcMsg"></p>
+      <div id="dcList" style="margin-top:18px;">جاري التحميل...</div>
+    </div>
   `;
+
   document.getElementById("sSaveBtn").addEventListener("click", async () => {
     const deliveryFee = Number(document.getElementById("sDelivery").value);
     const inspectionFee = Number(document.getElementById("sInspection").value);
@@ -1175,6 +1250,73 @@ function renderSettings(){
       msg.textContent = "تعذر الحفظ. تحقق من الاتصال.";
     }
   });
+
+  document.getElementById("dcAddBtn").addEventListener("click", async () => {
+    const code = document.getElementById("dcCode").value.trim();
+    const percent = Number(document.getElementById("dcPercent").value);
+    const msg = document.getElementById("dcMsg");
+    if(!code){
+      msg.className = "form-error";
+      msg.textContent = "أدخل نص الكود.";
+      return;
+    }
+    if(isNaN(percent) || percent <= 0 || percent > 100){
+      msg.className = "form-error";
+      msg.textContent = "أدخل نسبة خصم بين 1 و 100.";
+      return;
+    }
+    try{
+      const res = await fetch(`${API_BASE}/discount-codes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered },
+        body: JSON.stringify({ code, percent })
+      });
+      if(!res.ok) throw new Error("create failed");
+      document.getElementById("dcCode").value = "";
+      document.getElementById("dcPercent").value = "";
+      msg.className = "form-ok";
+      msg.textContent = "تمت إضافة الكود.";
+      loadDiscountCodesList();
+    }catch(e){
+      msg.className = "form-error";
+      msg.textContent = "تعذر إضافة الكود. قد يكون مستخدمًا مسبقًا.";
+    }
+  });
+
+  loadDiscountCodesList();
+}
+
+async function loadDiscountCodesList(){
+  const listEl = document.getElementById("dcList");
+  if(!listEl) return;
+  try{
+    const res = await fetch(`${API_BASE}/discount-codes`, { headers: { "X-Admin-Password": adminPasswordEntered } });
+    const codes = res.ok ? await res.json() : [];
+    if(codes.length === 0){
+      listEl.innerHTML = `<p style="color:var(--muted); font-size:13.5px;">لا توجد أكواد خصم بعد.</p>`;
+      return;
+    }
+    listEl.innerHTML = codes.map(dc => `
+      <div class="dc-row">
+        <span class="mono dc-row-code">${escapeHtml(dc.code)}</span>
+        <span class="mono">${dc.percent}%</span>
+        <button class="tag-del" data-id="${dc.id}">حذف</button>
+      </div>
+    `).join("");
+    listEl.querySelectorAll(".tag-del").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try{
+          await fetch(`${API_BASE}/discount-codes/${btn.dataset.id}`, {
+            method: "DELETE",
+            headers: { "X-Admin-Password": adminPasswordEntered }
+          });
+        }catch(e){ /* ignore */ }
+        loadDiscountCodesList();
+      });
+    });
+  }catch(e){
+    listEl.innerHTML = `<p class="form-error">تعذر تحميل الأكواد.</p>`;
+  }
 }
 
 const ORDER_STATUS_LABELS = { pending: "قيد التنفيذ", delivered: "تم التسليم", cancelled: "ملغي" };
@@ -1205,6 +1347,7 @@ function renderOrders(){
           </div>
           ${!isInspection && o.deliveryFee ? `<div class="order-meta">رسوم التوصيل: ${o.deliveryFee.toFixed(2)} د.ل</div>` : ``}
           ${isInspection ? `<div class="order-meta">رسوم الفحص: ${o.inspectionFee.toFixed(2)} د.ل</div>` : ``}
+          ${o.discountCode ? `<div class="order-meta">كود الخصم: ${escapeHtml(o.discountCode)} (-${o.discountAmount.toFixed(2)} د.ل)</div>` : ``}
           <div class="order-total mono">الإجمالي: ${o.total.toFixed(2)} د.ل</div>
           <div class="order-status-row">
             <span class="order-status-badge status-badge-${status}">${ORDER_STATUS_LABELS[status] || status}</span>
