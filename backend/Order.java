@@ -11,5 +11,7 @@ public class Order {
     public String orderType;
     public double deliveryFee;
     public double inspectionFee;
+    public String discountCode;
+    public double discountAmount;
     public List<OrderItem> items;
 }
