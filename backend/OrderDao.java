@@ -11,7 +11,7 @@ import java.util.Map;
 public class OrderDao {
 
     public Order create(Order o) throws Exception {
-        String sql = "INSERT INTO orders (customer_name, phone, location, total_price, order_type, delivery_fee, inspection_fee) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO orders (customer_name, phone, location, total_price, order_type, delivery_fee, inspection_fee, discount_code, discount_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try(Connection con = Db.getConnection();
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
             ps.setString(1, o.name);
@@ -21,6 +21,9 @@ public class OrderDao {
             ps.setString(5, (o.orderType == null || o.orderType.isEmpty()) ? "purchase" : o.orderType);
             ps.setDouble(6, o.deliveryFee);
             ps.setDouble(7, o.inspectionFee);
+            if(o.discountCode != null && !o.discountCode.isEmpty()) ps.setString(8, o.discountCode);
+            else ps.setNull(8, java.sql.Types.VARCHAR);
+            ps.setDouble(9, o.discountAmount);
             ps.executeUpdate();
             try(ResultSet keys = ps.getGeneratedKeys()){
                 keys.next();
@@ -47,7 +50,7 @@ public class OrderDao {
     public List<Order> getAll() throws Exception {
         Map<Integer, Order> map = new LinkedHashMap<>();
         String sql = "SELECT o.id, o.customer_name, o.phone, o.location, o.total_price, o.created_at, o.status, " +
-                     "o.order_type, o.delivery_fee, o.inspection_fee, " +
+                     "o.order_type, o.delivery_fee, o.inspection_fee, o.discount_code, o.discount_amount, " +
                      "i.product_name, i.price, i.quantity, i.size " +
                      "FROM orders o LEFT JOIN order_items i ON i.order_id = o.id " +
                      "ORDER BY o.id DESC";
@@ -68,6 +71,8 @@ public class OrderDao {
                     o.orderType = rs.getString("order_type");
                     o.deliveryFee = rs.getDouble("delivery_fee");
                     o.inspectionFee = rs.getDouble("inspection_fee");
+                    o.discountCode = rs.getString("discount_code");
+                    o.discountAmount = rs.getDouble("discount_amount");
                     Timestamp ts = rs.getTimestamp("created_at");
                     o.date = ts.toInstant().toString();
                     o.items = new ArrayList<>();
