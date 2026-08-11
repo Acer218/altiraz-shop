@@ -35,10 +35,12 @@ public class DiscountCodesHandler implements HttpHandler {
                 if(query != null && query.startsWith("code=")){
                     String code = URLDecoder.decode(query.substring(5), StandardCharsets.UTF_8);
                     DiscountCode dc = dao.getByCode(code);
-                    if(dc != null && dc.active){
-                        sendJson(exchange, 200, "{\"valid\":true,\"percent\":" + dc.percent + ",\"code\":\"" + dc.code + "\"}");
-                    } else {
+                    if(dc == null || !dc.active){
                         sendJson(exchange, 200, "{\"valid\":false}");
+                    } else if(dc.maxUses != null && dc.usedCount >= dc.maxUses){
+                        sendJson(exchange, 200, "{\"valid\":false,\"reason\":\"limit_reached\"}");
+                    } else {
+                        sendJson(exchange, 200, "{\"valid\":true,\"percent\":" + dc.percent + ",\"code\":\"" + dc.code + "\"}");
                     }
                     return;
                 }
@@ -61,6 +63,10 @@ public class DiscountCodesHandler implements HttpHandler {
                 DiscountCode dc = gson.fromJson(readBody(exchange), DiscountCode.class);
                 if(dc.code == null || dc.code.trim().isEmpty() || dc.percent <= 0 || dc.percent > 100){
                     sendJson(exchange, 400, "{\"error\":\"invalid code or percent\"}");
+                    return;
+                }
+                if(dc.maxUses != null && dc.maxUses <= 0){
+                    sendJson(exchange, 400, "{\"error\":\"invalid max uses\"}");
                     return;
                 }
                 DiscountCode created = dao.create(dc);
