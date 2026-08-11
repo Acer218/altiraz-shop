@@ -895,7 +895,9 @@ function renderCart(){
         } else {
           applyDiscountBtn.disabled = false;
           msg.className = "form-error";
-          msg.textContent = "هذا الكود غير صالح.";
+          msg.textContent = (data && data.reason === "limit_reached")
+            ? "تم استخدام هذا الكود الحد الأقصى من المرات المسموحة."
+            : "هذا الكود غير صالح.";
         }
       }catch(e){
         applyDiscountBtn.disabled = false;
@@ -1220,6 +1222,10 @@ async function renderSettings(){
         <label for="dcPercent">نسبة الخصم (%)</label>
         <input type="number" id="dcPercent" min="1" max="100" step="1" placeholder="10">
       </div>
+      <div class="field">
+        <label for="dcMaxUses">الحد الأقصى لعدد مرات الاستخدام (اتركه فارغًا لعدد غير محدود)</label>
+        <input type="number" id="dcMaxUses" min="1" step="1" placeholder="مثال: 50">
+      </div>
       <button class="primary-btn" id="dcAddBtn">إضافة الكود</button>
       <p class="form-error" id="dcMsg"></p>
       <div id="dcList" style="margin-top:18px;">جاري التحميل...</div>
@@ -1254,6 +1260,7 @@ async function renderSettings(){
   document.getElementById("dcAddBtn").addEventListener("click", async () => {
     const code = document.getElementById("dcCode").value.trim();
     const percent = Number(document.getElementById("dcPercent").value);
+    const maxUsesRaw = document.getElementById("dcMaxUses").value.trim();
     const msg = document.getElementById("dcMsg");
     if(!code){
       msg.className = "form-error";
@@ -1265,15 +1272,25 @@ async function renderSettings(){
       msg.textContent = "أدخل نسبة خصم بين 1 و 100.";
       return;
     }
+    let maxUses = null;
+    if(maxUsesRaw){
+      maxUses = Number(maxUsesRaw);
+      if(!Number.isInteger(maxUses) || maxUses < 1){
+        msg.className = "form-error";
+        msg.textContent = "الحد الأقصى للاستخدام يجب أن يكون عددًا صحيحًا أكبر من 0، أو اتركه فارغًا.";
+        return;
+      }
+    }
     try{
       const res = await fetch(`${API_BASE}/discount-codes`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered },
-        body: JSON.stringify({ code, percent })
+        body: JSON.stringify({ code, percent, maxUses })
       });
       if(!res.ok) throw new Error("create failed");
       document.getElementById("dcCode").value = "";
       document.getElementById("dcPercent").value = "";
+      document.getElementById("dcMaxUses").value = "";
       msg.className = "form-ok";
       msg.textContent = "تمت إضافة الكود.";
       loadDiscountCodesList();
@@ -1300,6 +1317,7 @@ async function loadDiscountCodesList(){
       <div class="dc-row">
         <span class="mono dc-row-code">${escapeHtml(dc.code)}</span>
         <span class="mono">${dc.percent}%</span>
+        <span class="mono dc-row-usage">${dc.usedCount}${dc.maxUses ? ` / ${dc.maxUses}` : ` (غير محدود)`}</span>
         <button class="tag-del" data-id="${dc.id}">حذف</button>
       </div>
     `).join("");
