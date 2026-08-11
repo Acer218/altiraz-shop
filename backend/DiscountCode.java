@@ -3,4 +3,6 @@ public class DiscountCode {
     public String code;
     public double percent;
     public boolean active;
+    public Integer maxUses;
+    public int usedCount;
 }
