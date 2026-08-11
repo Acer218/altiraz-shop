@@ -806,6 +806,7 @@ footer{
 }
 .dc-row:last-child{ border-bottom:none; }
 .dc-row-code{ flex:1; font-weight:700; }
+.dc-row-usage{ color:var(--muted); font-size:12px; }
 
 /* المتجر لعندك (home inspection) */
 .insp-grid{ margin-top:4px; margin-bottom:80px; }
