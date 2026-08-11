@@ -11,6 +11,7 @@ public class OrdersHandler implements HttpHandler {
     private static final String ORDER_TAKER_PASSWORD = System.getenv("STAFF_PASSWORD");
     private final Gson gson = new Gson();
     private final OrderDao dao = new OrderDao();
+    private final DiscountCodeDao discountCodeDao = new DiscountCodeDao();
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -33,6 +34,9 @@ public class OrdersHandler implements HttpHandler {
             if(method.equals("POST") && id == null){
                 Order o = gson.fromJson(readBody(exchange), Order.class);
                 Order created = dao.create(o);
+                if(o.discountCode != null && !o.discountCode.trim().isEmpty()){
+                    try{ discountCodeDao.incrementUsage(o.discountCode); }catch(Exception ignored){}
+                }
                 new Thread(() -> TelegramNotifier.sendOrderAlert(created)).start();
                 sendJson(exchange, 201, gson.toJson(created));
                 return;
