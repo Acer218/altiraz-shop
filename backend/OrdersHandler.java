@@ -12,6 +12,8 @@ public class OrdersHandler implements HttpHandler {
     private final Gson gson = new Gson();
     private final OrderDao dao = new OrderDao();
     private final DiscountCodeDao discountCodeDao = new DiscountCodeDao();
+    private final ProductDao productDao = new ProductDao();
+    private final SettingsDao settingsDao = new SettingsDao();
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -33,6 +35,58 @@ public class OrdersHandler implements HttpHandler {
         try{
             if(method.equals("POST") && id == null){
                 Order o = gson.fromJson(readBody(exchange), Order.class);
+
+                if(o.name == null || o.name.trim().isEmpty()
+                        || o.phone == null || !o.phone.matches("[0-9]{10}")
+                        || o.location == null || o.location.trim().isEmpty()
+                        || o.items == null || o.items.isEmpty()){
+                    sendJson(exchange, 400, "{\"error\":\"invalid order data\"}");
+                    return;
+                }
+
+                boolean isInspection = "inspection".equals(o.orderType);
+                List<Product> allProducts = productDao.getAll();
+                Settings currentSettings = settingsDao.get();
+
+                double subtotal = 0;
+                for(OrderItem item : o.items){
+                    Product match = null;
+                    for(Product p : allProducts){
+                        if(p.id == item.productId){ match = p; break; }
+                    }
+                    if(match == null){
+                        sendJson(exchange, 400, "{\"error\":\"invalid product in order\"}");
+                        return;
+                    }
+                    if(item.qty < 1) item.qty = 1;
+                    item.price = match.price;
+                    item.name = match.name;
+                    subtotal += item.price * item.qty;
+                }
+
+                if(isInspection){
+                    o.deliveryFee = 0;
+                    o.inspectionFee = currentSettings.inspectionFee;
+                    o.discountCode = null;
+                    o.discountAmount = 0;
+                    o.total = currentSettings.inspectionFee;
+                } else {
+                    o.deliveryFee = currentSettings.deliveryFee;
+                    o.inspectionFee = 0;
+                    double discountAmount = 0;
+                    if(o.discountCode != null && !o.discountCode.trim().isEmpty()){
+                        DiscountCode dc = discountCodeDao.getByCode(o.discountCode);
+                        if(dc != null && dc.active && (dc.maxUses == null || dc.usedCount < dc.maxUses)){
+                            discountAmount = subtotal * (dc.percent / 100.0);
+                            o.discountCode = dc.code;
+                        } else {
+                            o.discountCode = null;
+                        }
+                    }
+                    o.discountAmount = discountAmount;
+                    o.total = subtotal - discountAmount + o.deliveryFee;
+                }
+
                 Order created = dao.create(o);
                 if(o.discountCode != null && !o.discountCode.trim().isEmpty()){
                     try{ discountCodeDao.incrementUsage(o.discountCode); }catch(Exception ignored){}
