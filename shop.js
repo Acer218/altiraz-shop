@@ -7,6 +7,7 @@ let staffUnlocked = false;
 let staffPasswordEntered = "";
 let cartTaps = [];
 
+
 const CATEGORIES = [
   { key: "women", label: "اثواب", tagline: "أثواب تقليدية فاخرة مستوحاة من التراث الليبي" },
   { key: "men", label: "رجال", tagline: "أزياء رجالية أصيلة تجمع بين التراث والفخامة" },
