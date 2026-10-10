@@ -6,3 +6,4 @@ public class StaffUser {
     public String role;
     public boolean active;
 }
+
