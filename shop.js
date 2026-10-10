@@ -3,6 +3,7 @@ const CART_KEY = "altirazCart";
 const CUSTOMER_INFO_KEY = "altirazCustomerInfo";
 const WHATSAPP_NUMBER = "218925016142";
 let adminPasswordEntered = "";
+
 let actorName = "الإدارة";
 let orderSearchTerm = "";
 let orderStatusFilter = "all";
