@@ -3,4 +3,5 @@ public class ActivityLogEntry {
     public String actorName;
     public String action;
     public String date;
+    
 }
