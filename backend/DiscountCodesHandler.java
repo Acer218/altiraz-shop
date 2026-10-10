@@ -11,6 +11,7 @@ public class DiscountCodesHandler implements HttpHandler {
     private static final String ADMIN_PASSWORD = System.getenv("ADMIN_PASSWORD");
     private final Gson gson = new Gson();
     private final DiscountCodeDao dao = new DiscountCodeDao();
+    private final ActivityLogDao logDao = new ActivityLogDao();
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -59,6 +60,8 @@ public class DiscountCodesHandler implements HttpHandler {
                 return;
             }
 
+            String actor = exchange.getRequestHeaders().getFirst("X-Actor-Name");
+
             if(method.equals("POST")){
                 DiscountCode dc = gson.fromJson(readBody(exchange), DiscountCode.class);
                 if(dc.code == null || dc.code.trim().isEmpty() || dc.percent <= 0 || dc.percent > 100){
@@ -70,9 +73,11 @@ public class DiscountCodesHandler implements HttpHandler {
                     return;
                 }
                 DiscountCode created = dao.create(dc);
+                logDao.log(actor, "أضاف كود خصم: " + created.code + " (" + created.percent + "%)");
                 sendJson(exchange, 201, gson.toJson(created));
             } else if(method.equals("DELETE") && id != null){
                 dao.delete(id);
+                logDao.log(actor, "حذف كود خصم رقم " + id);
                 sendJson(exchange, 200, "{\"deleted\":true}");
             } else {
                 sendJson(exchange, 404, "{\"error\":\"not found\"}");
@@ -95,7 +100,7 @@ public class DiscountCodesHandler implements HttpHandler {
     private void addCorsHeaders(HttpExchange exchange){
         exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
         exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, X-Actor-Name");
     }
 
     private void sendJson(HttpExchange exchange, int status, String json) throws IOException {
