@@ -7,31 +7,56 @@ import java.nio.charset.StandardCharsets;
 public class AuthHandler implements HttpHandler {
     private static final String ADMIN_PASSWORD = System.getenv("ADMIN_PASSWORD");
     private static final String STAFF_PASSWORD = System.getenv("STAFF_PASSWORD");
+    private final StaffUserDao staffUserDao = new StaffUserDao();
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
         exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, OPTIONS");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, X-Username");
 
         if(exchange.getRequestMethod().equals("OPTIONS")){
             exchange.sendResponseHeaders(204, -1);
             return;
         }
 
-        String header = exchange.getRequestHeaders().getFirst("X-Admin-Password");
-        String role = null;
-        if(ADMIN_PASSWORD != null && ADMIN_PASSWORD.equals(header)){
-            role = "admin";
-        } else if(STAFF_PASSWORD != null && STAFF_PASSWORD.equals(header)){
-            role = "staff";
-        }
+        String password = exchange.getRequestHeaders().getFirst("X-Admin-Password");
+        String username = exchange.getRequestHeaders().getFirst("X-Username");
 
-        if(role == null){
-            sendJson(exchange, 401, "{\"error\":\"unauthorized\"}");
-        } else {
-            sendJson(exchange, 200, "{\"role\":\"" + role + "\"}");
+        try{
+            if(username != null && !username.trim().isEmpty()){
+                StaffUserAuth user = staffUserDao.getForAuth(username.trim());
+                if(user != null && user.active && PasswordUtil.verify(password, user.salt, user.passwordHash)){
+                    sendJson(exchange, 200, "{\"role\":\"" + user.role + "\",\"name\":\"" + escapeJson(user.name) + "\"}");
+                } else {
+                    sendJson(exchange, 401, "{\"error\":\"unauthorized\"}");
+                }
+                return;
+            }
+
+            String role = null;
+            String name = null;
+            if(ADMIN_PASSWORD != null && ADMIN_PASSWORD.equals(password)){
+                role = "admin";
+                name = "المدير";
+            } else if(STAFF_PASSWORD != null && STAFF_PASSWORD.equals(password)){
+                role = "staff";
+                name = "فريق الطلبات";
+            }
+
+            if(role == null){
+                sendJson(exchange, 401, "{\"error\":\"unauthorized\"}");
+            } else {
+                sendJson(exchange, 200, "{\"role\":\"" + role + "\",\"name\":\"" + name + "\"}");
+            }
+        }catch(Exception e){
+            e.printStackTrace();
+            sendJson(exchange, 500, "{\"error\":\"server error\"}");
         }
+    }
+
+    private String escapeJson(String s){
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private void sendJson(HttpExchange exchange, int status, String json) throws IOException {
