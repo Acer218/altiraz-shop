@@ -14,6 +14,7 @@ public class OrdersHandler implements HttpHandler {
     private final DiscountCodeDao discountCodeDao = new DiscountCodeDao();
     private final ProductDao productDao = new ProductDao();
     private final SettingsDao settingsDao = new SettingsDao();
+    private final ActivityLogDao logDao = new ActivityLogDao();
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -101,15 +102,19 @@ public class OrdersHandler implements HttpHandler {
                 return;
             }
 
+            String actor = exchange.getRequestHeaders().getFirst("X-Actor-Name");
+
             if(method.equals("GET") && id == null){
                 List<Order> orders = dao.getAll();
                 sendJson(exchange, 200, gson.toJson(orders));
             } else if(method.equals("PUT") && id != null){
                 Order o = gson.fromJson(readBody(exchange), Order.class);
                 dao.updateStatus(id, o.status);
+                logDao.log(actor, "غيّر حالة الطلب #" + id + " إلى " + o.status);
                 sendJson(exchange, 200, "{\"updated\":true}");
             } else if(method.equals("DELETE") && id != null){
                 dao.delete(id);
+                logDao.log(actor, "حذف الطلب #" + id);
                 sendJson(exchange, 200, "{\"deleted\":true}");
             } else {
                 sendJson(exchange, 404, "{\"error\":\"not found\"}");
@@ -122,7 +127,8 @@ public class OrdersHandler implements HttpHandler {
 
     private boolean checkAdmin(HttpExchange exchange){
         String header = exchange.getRequestHeaders().getFirst("X-Admin-Password");
-        return ADMIN_PASSWORD.equals(header) || ORDER_TAKER_PASSWORD.equals(header);
+        return (ADMIN_PASSWORD != null && ADMIN_PASSWORD.equals(header))
+                || (ORDER_TAKER_PASSWORD != null && ORDER_TAKER_PASSWORD.equals(header));
     }
 
     private String readBody(HttpExchange exchange) throws IOException {
@@ -132,7 +138,7 @@ public class OrdersHandler implements HttpHandler {
     private void addCorsHeaders(HttpExchange exchange){
         exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
         exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, X-Actor-Name");
     }
 
     private void sendJson(HttpExchange exchange, int status, String json) throws IOException {
