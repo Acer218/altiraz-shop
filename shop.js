@@ -3,10 +3,13 @@ const CART_KEY = "altirazCart";
 const CUSTOMER_INFO_KEY = "altirazCustomerInfo";
 const WHATSAPP_NUMBER = "218925016142";
 let adminPasswordEntered = "";
+let actorName = "الإدارة";
+let orderSearchTerm = "";
+let orderStatusFilter = "all";
+let bulkSelectedProducts = [];
 let staffUnlocked = false;
 let staffPasswordEntered = "";
 let cartTaps = [];
-
 
 const CATEGORIES = [
   { key: "women", label: "اثواب", tagline: "أثواب تقليدية فاخرة مستوحاة من التراث الليبي" },
@@ -141,7 +144,7 @@ async function fetchSettings(){
 async function updateSettings(deliveryFee, inspectionFee, maxInspectionItems){
   const res = await fetch(`${API_BASE}/settings`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered },
+    headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName },
     body: JSON.stringify({ deliveryFee, inspectionFee, maxInspectionItems })
   });
   if(!res.ok) throw new Error("settings update failed");
@@ -194,7 +197,7 @@ function refreshCartBadge(){
 
 function goHome(){ view="home"; currentCategory=null; editingId=null; pendingImages=[]; setActiveNav(); render(); scrollTop(); }
 function goAbout(){ view="about"; setActiveNav(); render(); scrollTop(); }
-function goCategory(key){ view="category"; currentCategory=key; editingId=null; pendingImages=[]; categorySearchTerm=""; setActiveNav(); render(); scrollTop(); }
+function goCategory(key){ view="category"; currentCategory=key; editingId=null; pendingImages=[]; categorySearchTerm=""; bulkSelectedProducts=[]; setActiveNav(); render(); scrollTop(); }
 function goCart(){ view="cart"; checkoutOpen=false; orderConfirmed=false; setActiveNav(); render(); scrollTop(); }
 function goInspection(){
   view = "inspection";
@@ -230,6 +233,7 @@ function render(){
     return;
   }
   if(view !== "inspection") removeInspectionBar();
+  if(view !== "category") removeBulkBar();
   renderBanner();
   if(view === "home") renderHome();
   else if(view === "category") renderCategory(currentCategory);
@@ -244,10 +248,11 @@ function render(){
 function renderBanner(){
   if(adminUnlocked){
     bannerEl.style.display = "flex";
-    bannerEl.innerHTML = `وضع الإدارة مفعّل <button id="logoutBtn">تسجيل الخروج</button>`;
+    bannerEl.innerHTML = `وضع الإدارة مفعّل — ${escapeHtml(actorName)} <button id="logoutBtn">تسجيل الخروج</button>`;
     document.getElementById("logoutBtn").addEventListener("click", () => {
       adminUnlocked = false;
       adminPasswordEntered = "";
+      actorName = "الإدارة";
       if(view === "orders") view = "home";
       buildNav();
       setActiveNav();
@@ -256,10 +261,11 @@ function renderBanner(){
     });
   } else if(staffUnlocked){
     bannerEl.style.display = "flex";
-    bannerEl.innerHTML = `وضع استلام الطلبات مفعّل <button id="logoutBtn">تسجيل الخروج</button>`;
+    bannerEl.innerHTML = `وضع استلام الطلبات مفعّل — ${escapeHtml(actorName)} <button id="logoutBtn">تسجيل الخروج</button>`;
     document.getElementById("logoutBtn").addEventListener("click", () => {
       staffUnlocked = false;
       staffPasswordEntered = "";
+      actorName = "الإدارة";
       if(view === "orders") view = "home";
       buildNav();
       setActiveNav();
@@ -457,8 +463,10 @@ function renderCategoryGrid(key){
     for(const p of items){
       const soldOut = p.inStock === false;
       const isFeatured = p.featured === true;
+      const bulkChecked = bulkSelectedProducts.includes(p.id);
       html += `
-        <div class="tag" data-id="${p.id}">
+        <div class="tag ${bulkChecked ? "bulk-selected" : ""}" data-id="${p.id}">
+          <input type="checkbox" class="bulk-checkbox" data-id="${p.id}" ${bulkChecked ? "checked" : ""}>
           <img class="tag-img" src="${p.images[0]}" alt="${escapeHtml(p.name)}">
           ${soldOut ? `<span class="sold-out-badge">نفذت الكمية</span>` : ``}
           <button type="button" class="feature-star ${isFeatured ? "active" : ""}" data-id="${p.id}" title="${isFeatured ? "إزالة من المختارات المميزة" : "إضافة إلى المختارات المميزة"}">
@@ -480,18 +488,99 @@ function renderCategoryGrid(key){
     container.innerHTML = html;
     container.querySelectorAll(".tag").forEach(tagEl => {
       tagEl.addEventListener("click", (e) => {
-        if(e.target.closest("button")) return;
+        if(e.target.closest("button") || e.target.closest("input")) return;
         openProductModal(Number(tagEl.dataset.id));
       });
     });
     container.querySelectorAll(".tag-edit").forEach(btn => btn.addEventListener("click", () => startEdit(Number(btn.dataset.id), key)));
     container.querySelectorAll(".tag-del").forEach(btn => btn.addEventListener("click", () => handleDelete(Number(btn.dataset.id), key)));
     container.querySelectorAll(".feature-star").forEach(btn => btn.addEventListener("click", () => toggleFeatured(Number(btn.dataset.id), key)));
+    container.querySelectorAll(".bulk-checkbox").forEach(cb => {
+      cb.addEventListener("click", e => e.stopPropagation());
+      cb.addEventListener("change", () => {
+        const id = Number(cb.dataset.id);
+        if(cb.checked){
+          if(!bulkSelectedProducts.includes(id)) bulkSelectedProducts.push(id);
+        } else {
+          bulkSelectedProducts = bulkSelectedProducts.filter(i => i !== id);
+        }
+        renderBulkBar(key);
+      });
+    });
+    renderBulkBar(key);
   } else {
+    removeBulkBar();
     html = '<div class="grid">' + items.map(buildCustomerCardHtml).join("") + '</div>';
     container.innerHTML = html;
     wireCustomerCards(container);
   }
+}
+
+function renderBulkBar(catKey){
+  removeBulkBar();
+  if(bulkSelectedProducts.length === 0) return;
+  const bar = document.createElement("div");
+  bar.id = "bulkActionBar";
+  bar.className = "insp-sticky-bar";
+  bar.innerHTML = `
+    <span class="mono">تم تحديد ${bulkSelectedProducts.length} منتج</span>
+    <div class="bulk-actions-group">
+      <input type="number" id="bulkPricePercent" placeholder="% تغيير السعر">
+      <button class="ghost-btn bulk-inline-btn" id="bulkPriceBtn">تطبيق</button>
+      <button class="primary-btn bulk-inline-btn" id="bulkDeleteBtn">حذف المحدد</button>
+    </div>
+  `;
+  document.body.appendChild(bar);
+
+  document.getElementById("bulkDeleteBtn").addEventListener("click", async () => {
+    if(!confirm(`هل أنت متأكد من حذف ${bulkSelectedProducts.length} منتج؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    for(const id of bulkSelectedProducts){
+      try{
+        await fetch(`${API_BASE}/products/${id}`, {
+          method: "DELETE",
+          headers: { "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName }
+        });
+      }catch(e){ /* continue with remaining items even if one fails */ }
+    }
+    bulkSelectedProducts = [];
+    await refreshProducts();
+    renderCategoryGrid(catKey);
+  });
+
+  document.getElementById("bulkPriceBtn").addEventListener("click", async () => {
+    const pct = Number(document.getElementById("bulkPricePercent").value);
+    if(isNaN(pct) || pct === 0){
+      alert("أدخل نسبة مئوية صحيحة (مثال: 10 للزيادة، أو -10 للتخفيض).");
+      return;
+    }
+    if(!confirm(`سيتم تغيير سعر ${bulkSelectedProducts.length} منتج بنسبة ${pct}%. متابعة؟`)) return;
+    for(const id of bulkSelectedProducts){
+      const p = products.find(p => p.id === id);
+      if(!p) continue;
+      const newPrice = Math.max(0, p.price * (1 + pct / 100));
+      const payload = {
+        name: p.name, description: p.description, category: p.category,
+        price: Math.round(newPrice * 100) / 100,
+        compareAtPrice: p.compareAtPrice || null,
+        images: p.images, sizes: p.sizes || [],
+        inStock: p.inStock !== false, featured: p.featured === true
+      };
+      try{
+        await fetch(`${API_BASE}/products/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName },
+          body: JSON.stringify(payload)
+        });
+      }catch(e){ /* continue with remaining items even if one fails */ }
+    }
+    bulkSelectedProducts = [];
+    await refreshProducts();
+    renderCategoryGrid(catKey);
+  });
+}
+function removeBulkBar(){
+  const el = document.getElementById("bulkActionBar");
+  if(el) el.remove();
 }
 
 function renderSearchView(){
@@ -516,8 +605,87 @@ function renderSearchView(){
   html += `<div class="grid" id="searchGrid"></div>`;
   mainEl.innerHTML = html;
   const grid = document.getElementById("searchGrid");
-  grid.innerHTML = items.map(buildCustomerCardHtml).join("");
-  wireCustomerCards(grid);
+
+  if(adminUnlocked){
+    grid.innerHTML = items.map(buildAdminSearchCardHtml).join("");
+    grid.querySelectorAll(".tag").forEach(tagEl => {
+      tagEl.addEventListener("click", (e) => {
+        if(e.target.closest("button")) return;
+        openProductModal(Number(tagEl.dataset.id));
+      });
+    });
+    grid.querySelectorAll(".feature-star").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await toggleFeaturedInline(Number(btn.dataset.id));
+        renderSearchView();
+      });
+    });
+    grid.querySelectorAll(".search-edit-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        goCategory(btn.dataset.cat);
+        startEdit(Number(btn.dataset.id), btn.dataset.cat);
+      });
+    });
+    grid.querySelectorAll(".search-del-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const p = products.find(p => p.id === Number(btn.dataset.id));
+        if(!confirm(`هل أنت متأكد من حذف "${p ? p.name : "هذا المنتج"}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+        try{
+          await fetch(`${API_BASE}/products/${btn.dataset.id}`, {
+            method: "DELETE",
+            headers: { "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName }
+          });
+          await refreshProducts();
+          renderSearchView();
+        }catch(e){ /* leave item in place if the request failed */ }
+      });
+    });
+  } else {
+    grid.innerHTML = items.map(buildCustomerCardHtml).join("");
+    wireCustomerCards(grid);
+  }
+}
+
+function buildAdminSearchCardHtml(p){
+  const soldOut = p.inStock === false;
+  const isFeatured = p.featured === true;
+  return `
+    <div class="tag" data-id="${p.id}">
+      <img class="tag-img" src="${p.images[0]}" alt="${escapeHtml(p.name)}">
+      ${soldOut ? `<span class="sold-out-badge">نفذت الكمية</span>` : ``}
+      <button type="button" class="feature-star ${isFeatured ? "active" : ""}" data-id="${p.id}" title="${isFeatured ? "إزالة من المختارات المميزة" : "إضافة إلى المختارات المميزة"}">
+        <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      </button>
+      <h3 class="tag-name">${escapeHtml(p.name)}</h3>
+      <p class="tag-desc">${escapeHtml(p.description)}</p>
+      <div class="tag-footer">
+        <span class="tag-price mono">${Number(p.price).toFixed(2)} د.ل</span>
+        <div class="tag-admin-actions">
+          <button class="search-edit-btn" data-id="${p.id}" data-cat="${p.category}">تعديل</button>
+          <button class="search-del-btn" data-id="${p.id}">حذف</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function toggleFeaturedInline(id){
+  const p = products.find(p => p.id === id);
+  if(!p) return;
+  const payload = {
+    name: p.name, description: p.description, category: p.category,
+    price: p.price, compareAtPrice: p.compareAtPrice || null,
+    images: p.images, sizes: p.sizes || [],
+    inStock: p.inStock !== false, featured: !(p.featured === true)
+  };
+  try{
+    await fetch(`${API_BASE}/products/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName },
+      body: JSON.stringify(payload)
+    });
+    await refreshProducts();
+  }catch(e){ /* star just won't flip visually if the request failed */ }
 }
 
 /* admin add/edit form */
@@ -683,12 +851,12 @@ async function handleSave(catKey){
     const res = editing
       ? await fetch(`${API_BASE}/products/${editing.id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered },
+          headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName },
           body: JSON.stringify(payload)
         })
       : await fetch(`${API_BASE}/products`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered },
+          headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName },
           body: JSON.stringify(payload)
         });
 
@@ -706,10 +874,13 @@ async function handleSave(catKey){
 }
 
 async function handleDelete(id, catKey){
+  const p = products.find(p => p.id === id);
+  const name = p ? p.name : "هذا المنتج";
+  if(!confirm(`هل أنت متأكد من حذف "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
   try{
     const res = await fetch(`${API_BASE}/products/${id}`, {
       method: "DELETE",
-      headers: { "X-Admin-Password": adminPasswordEntered }
+      headers: { "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName }
     });
     if(!res.ok) throw new Error("delete failed");
     await refreshProducts();
@@ -736,7 +907,7 @@ async function toggleFeatured(id, catKey){
   try{
     const res = await fetch(`${API_BASE}/products/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered },
+      headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName },
       body: JSON.stringify(payload)
     });
     if(!res.ok) throw new Error("toggle failed");
@@ -1231,7 +1402,69 @@ async function renderSettings(){
       <p class="form-error" id="dcMsg"></p>
       <div id="dcList" style="margin-top:18px;">جاري التحميل...</div>
     </div>
+
+    <div class="panel" style="max-width:420px; margin:24px auto 0;">
+      <h3>حسابات الموظفين</h3>
+      <div class="field">
+        <label for="suName">الاسم</label>
+        <input type="text" id="suName" placeholder="اسم الموظف">
+      </div>
+      <div class="field">
+        <label for="suUsername">اسم المستخدم</label>
+        <input type="text" id="suUsername" placeholder="مثال: ahmed">
+      </div>
+      <div class="field">
+        <label for="suPassword">كلمة المرور</label>
+        <input type="password" id="suPassword" placeholder="كلمة مرور قوية">
+      </div>
+      <div class="field">
+        <label for="suRole">الصلاحية</label>
+        <select id="suRole">
+          <option value="staff">موظف طلبات (الطلبات فقط)</option>
+          <option value="admin">مدير (كل الصلاحيات)</option>
+        </select>
+      </div>
+      <button class="primary-btn" id="suAddBtn">إضافة حساب</button>
+      <p class="form-error" id="suMsg"></p>
+      <div id="suList" style="margin-top:18px;">جاري التحميل...</div>
+    </div>
+
+    <div class="panel" style="max-width:420px; margin:24px auto 0;">
+      <h3>سجل النشاط</h3>
+      <div id="activityLogList">جاري التحميل...</div>
+    </div>
   `;
+
+  document.getElementById("suAddBtn").addEventListener("click", async () => {
+    const name = document.getElementById("suName").value.trim();
+    const username = document.getElementById("suUsername").value.trim();
+    const password = document.getElementById("suPassword").value;
+    const role = document.getElementById("suRole").value;
+    const msg = document.getElementById("suMsg");
+    if(!name || !username || !password){
+      msg.className = "form-error";
+      msg.textContent = "املأ الاسم واسم المستخدم وكلمة المرور.";
+      return;
+    }
+    try{
+      const res = await fetch(`${API_BASE}/staff-users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName },
+        body: JSON.stringify({ name, username, password, role })
+      });
+      if(!res.ok) throw new Error("create failed");
+      document.getElementById("suName").value = "";
+      document.getElementById("suUsername").value = "";
+      document.getElementById("suPassword").value = "";
+      msg.className = "form-ok";
+      msg.textContent = "تمت إضافة الحساب.";
+      loadStaffUsersList();
+      loadActivityLog();
+    }catch(e){
+      msg.className = "form-error";
+      msg.textContent = "تعذر إضافة الحساب. قد يكون اسم المستخدم مستخدمًا مسبقًا، أو أن هذه الصلاحية متاحة للحساب الرئيسي فقط.";
+    }
+  });
 
   document.getElementById("sSaveBtn").addEventListener("click", async () => {
     const deliveryFee = Number(document.getElementById("sDelivery").value);
@@ -1285,7 +1518,7 @@ async function renderSettings(){
     try{
       const res = await fetch(`${API_BASE}/discount-codes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered },
+        headers: { "Content-Type": "application/json", "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName },
         body: JSON.stringify({ code, percent, maxUses })
       });
       if(!res.ok) throw new Error("create failed");
@@ -1302,6 +1535,78 @@ async function renderSettings(){
   });
 
   loadDiscountCodesList();
+  loadStaffUsersList();
+  loadActivityLog();
+}
+
+async function loadStaffUsersList(){
+  const listEl = document.getElementById("suList");
+  if(!listEl) return;
+  const headers = { "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName };
+  try{
+    const res = await fetch(`${API_BASE}/staff-users`, { headers });
+    const users = res.ok ? await res.json() : [];
+    if(users.length === 0){
+      listEl.innerHTML = `<p style="color:var(--muted); font-size:13.5px;">لا توجد حسابات موظفين بعد.</p>`;
+      return;
+    }
+    listEl.innerHTML = users.map(u => `
+      <div class="dc-row">
+        <span class="dc-row-code">${escapeHtml(u.name)}</span>
+        <span class="mono">${escapeHtml(u.username)}</span>
+        <span class="mono">${u.role === "admin" ? "مدير" : "موظف"}</span>
+        <button class="tag-del su-toggle-btn" data-id="${u.id}" data-active="${u.active}">${u.active ? "إيقاف" : "تفعيل"}</button>
+        <button class="tag-del su-del-btn" data-id="${u.id}">حذف</button>
+      </div>
+    `).join("");
+    listEl.querySelectorAll(".su-toggle-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const newActive = btn.dataset.active !== "true";
+        try{
+          await fetch(`${API_BASE}/staff-users/${btn.dataset.id}`, {
+            method: "PUT",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({ active: newActive })
+          });
+        }catch(e){ /* ignore */ }
+        loadStaffUsersList();
+        loadActivityLog();
+      });
+    });
+    listEl.querySelectorAll(".su-del-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if(!confirm("هل أنت متأكد من حذف هذا الحساب؟")) return;
+        try{
+          await fetch(`${API_BASE}/staff-users/${btn.dataset.id}`, { method: "DELETE", headers });
+        }catch(e){ /* ignore */ }
+        loadStaffUsersList();
+        loadActivityLog();
+      });
+    });
+  }catch(e){
+    listEl.innerHTML = `<p class="form-error">تعذر تحميل الحسابات.</p>`;
+  }
+}
+
+async function loadActivityLog(){
+  const listEl = document.getElementById("activityLogList");
+  if(!listEl) return;
+  try{
+    const res = await fetch(`${API_BASE}/activity-log`, { headers: { "X-Admin-Password": adminPasswordEntered } });
+    const entries = res.ok ? await res.json() : [];
+    if(entries.length === 0){
+      listEl.innerHTML = `<p style="color:var(--muted); font-size:13.5px;">لا يوجد نشاط مسجل بعد.</p>`;
+      return;
+    }
+    listEl.innerHTML = `<div class="activity-log-scroll">` + entries.map(e => `
+      <div class="activity-row">
+        <span class="activity-text"><b>${escapeHtml(e.actorName || "—")}</b>: ${escapeHtml(e.action || "")}</span>
+        <span class="activity-date mono">${escapeHtml(e.date || "")}</span>
+      </div>
+    `).join("") + `</div>`;
+  }catch(err){
+    listEl.innerHTML = `<p class="form-error">تعذر تحميل السجل.</p>`;
+  }
 }
 
 async function loadDiscountCodesList(){
@@ -1324,10 +1629,11 @@ async function loadDiscountCodesList(){
     `).join("");
     listEl.querySelectorAll(".tag-del").forEach(btn => {
       btn.addEventListener("click", async () => {
+        if(!confirm("هل أنت متأكد من حذف هذا الكود؟")) return;
         try{
           await fetch(`${API_BASE}/discount-codes/${btn.dataset.id}`, {
             method: "DELETE",
-            headers: { "X-Admin-Password": adminPasswordEntered }
+            headers: { "X-Admin-Password": adminPasswordEntered, "X-Actor-Name": actorName }
           });
         }catch(e){ /* ignore */ }
         loadDiscountCodesList();
@@ -1342,11 +1648,34 @@ const ORDER_STATUS_LABELS = { pending: "قيد التنفيذ", delivered: "تم
 
 function renderOrders(){
   let html = `<div class="cat-top"><h2>الطلبات</h2></div>`;
+  html += `
+    <div class="order-filter-bar">
+      <input type="text" id="orderSearchInput" placeholder="ابحث بالاسم أو رقم الهاتف..." value="${escapeHtml(orderSearchTerm)}">
+      <select id="orderStatusSelect">
+        <option value="all" ${orderStatusFilter === "all" ? "selected" : ""}>كل الحالات</option>
+        <option value="pending" ${orderStatusFilter === "pending" ? "selected" : ""}>قيد التنفيذ</option>
+        <option value="delivered" ${orderStatusFilter === "delivered" ? "selected" : ""}>تم التسليم</option>
+        <option value="cancelled" ${orderStatusFilter === "cancelled" ? "selected" : ""}>ملغي</option>
+      </select>
+    </div>
+  `;
+
+  const term = orderSearchTerm.trim().toLowerCase();
+  let filtered = [...orders].reverse();
+  if(orderStatusFilter !== "all"){
+    filtered = filtered.filter(o => (o.status || "pending") === orderStatusFilter);
+  }
+  if(term){
+    filtered = filtered.filter(o => o.name.toLowerCase().includes(term) || o.phone.includes(term));
+  }
+
   if(orders.length === 0){
     html += `<div class="empty"><h3>لا توجد طلبات بعد.</h3></div>`;
+  } else if(filtered.length === 0){
+    html += `<div class="empty"><h3>لا توجد طلبات مطابقة لبحثك.</h3></div>`;
   } else {
     html += '<div class="order-list">';
-    for(const o of [...orders].reverse()){
+    for(const o of filtered){
       const d = new Date(o.date);
       const status = o.status || "pending";
       const isInspection = o.orderType === "inspection";
@@ -1383,12 +1712,28 @@ function renderOrders(){
     html += '</div>';
   }
   mainEl.innerHTML = html;
+
+  const searchInput = document.getElementById("orderSearchInput");
+  if(searchInput){
+    searchInput.addEventListener("input", () => {
+      orderSearchTerm = searchInput.value;
+      renderOrders();
+    });
+  }
+  const statusSelect = document.getElementById("orderStatusSelect");
+  if(statusSelect){
+    statusSelect.addEventListener("change", () => {
+      orderStatusFilter = statusSelect.value;
+      renderOrders();
+    });
+  }
+
   mainEl.querySelectorAll(".status-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       try{
         await fetch(`${API_BASE}/orders/${btn.dataset.id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json", "X-Admin-Password": authHeader() },
+          headers: { "Content-Type": "application/json", "X-Admin-Password": authHeader(), "X-Actor-Name": actorName },
           body: JSON.stringify({ status: btn.dataset.status })
         });
       }catch(e){ /* ignore, list will just show the old status if this failed */ }
@@ -1398,10 +1743,11 @@ function renderOrders(){
   });
   mainEl.querySelectorAll(".order-card .tag-del").forEach(btn => {
     btn.addEventListener("click", async () => {
+      if(!confirm("هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.")) return;
       try{
         await fetch(`${API_BASE}/orders/${btn.dataset.id}`, {
           method: "DELETE",
-          headers: { "X-Admin-Password": authHeader() }
+          headers: { "X-Admin-Password": authHeader(), "X-Actor-Name": actorName }
         });
       }catch(e){ /* ignore, list will just show it again on next load if delete failed */ }
       await loadOrders();
@@ -1774,6 +2120,7 @@ function openGate(){
       <h2>دخول الإدارة</h2>
       <p>أدخل كلمة المرور لإدارة المتجر</p>
       <div class="gate-error" id="gateError"></div>
+      <input type="text" id="gateUsername" placeholder="اسم المستخدم (اتركه فارغًا للحساب الرئيسي)">
       <input type="password" id="gatePass" placeholder="كلمة المرور">
       <button class="primary-btn" id="gateSubmit">دخول</button>
       <button class="ghost-btn" id="gateCancel">إلغاء</button>
@@ -1781,15 +2128,20 @@ function openGate(){
   `;
   document.body.appendChild(overlay);
   const input = document.getElementById("gatePass");
+  const usernameInput = document.getElementById("gateUsername");
   const err = document.getElementById("gateError");
   async function tryUnlock(){
     const candidate = input.value;
+    const username = usernameInput.value.trim();
     try{
-      const res = await fetch(`${API_BASE}/auth-check`, { headers: { "X-Admin-Password": candidate } });
+      const headers = { "X-Admin-Password": candidate };
+      if(username) headers["X-Username"] = username;
+      const res = await fetch(`${API_BASE}/auth-check`, { headers });
       const data = res.ok ? await res.json() : null;
       if(data && data.role === "admin"){
         adminUnlocked = true;
         adminPasswordEntered = candidate;
+        actorName = data.name || "الإدارة";
         closeGate();
         buildNav();
         setActiveNav();
@@ -1835,6 +2187,7 @@ function openStaffGate(){
       <h2>دخول استلام الطلبات</h2>
       <p>أدخل كلمة المرور للاطلاع على الطلبات</p>
       <div class="gate-error" id="staffGateError"></div>
+      <input type="text" id="staffGateUsername" placeholder="اسم المستخدم (اتركه فارغًا للحساب الرئيسي)">
       <input type="password" id="staffGatePass" placeholder="كلمة المرور">
       <button class="primary-btn" id="staffGateSubmit">دخول</button>
       <button class="ghost-btn" id="staffGateCancel">إلغاء</button>
@@ -1842,15 +2195,20 @@ function openStaffGate(){
   `;
   document.body.appendChild(overlay);
   const input = document.getElementById("staffGatePass");
+  const usernameInput = document.getElementById("staffGateUsername");
   const err = document.getElementById("staffGateError");
   async function tryUnlock(){
     const candidate = input.value;
+    const username = usernameInput.value.trim();
     try{
-      const res = await fetch(`${API_BASE}/auth-check`, { headers: { "X-Admin-Password": candidate } });
+      const headers = { "X-Admin-Password": candidate };
+      if(username) headers["X-Username"] = username;
+      const res = await fetch(`${API_BASE}/auth-check`, { headers });
       const data = res.ok ? await res.json() : null;
       if(data && (data.role === "staff" || data.role === "admin")){
         staffUnlocked = true;
         staffPasswordEntered = candidate;
+        actorName = data.name || "فريق الطلبات";
         closeStaffGate();
         buildNav();
         setActiveNav();
