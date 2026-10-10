@@ -5,6 +5,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
+
 public class ActivityLogDao {
 
     public void log(String actorName, String action){
